@@ -1,0 +1,411 @@
+id = "ferrite.git"
+name = "Git"
+version = "0.2.0"
+description = "Source control with Git: stage, commit, and browse history; file status in the explorer; the current branch."
+author = "Ferrite"
+icon = "icon.svg"
+api_version = "1"
+entrypoint = "../target/wasm32-unknown-unknown/release/git.wasm"
+activation = ["on-startup"]
+on_folder_changed = "ferrite.git.folderChanged"
+
+[permissions]
+# Watching the open folder for changes.
+files_read = true
+# Deleting untracked files when their changes are discarded.
+files_write = true
+processes = true
+
+[[programs]]
+name = "git"
+
+# The Source Control view: changes, with a commit message box, and commits.
+[[view_containers]]
+id = "scm"
+title = "Source Control"
+icon = "source-control"
+
+[[views]]
+id = "changes"
+title = "Changes"
+container = "scm"
+input = { placeholder = "Message (Ctrl+Enter to commit)", command = "ferrite.git.commit" }
+
+[[views]]
+id = "commits"
+title = "Commits"
+container = "scm"
+on_expand = "ferrite.git.expandCommit"
+
+[[previews]]
+id = "commit"
+icon = "history"
+
+# Commands from the palette.
+[[commands]]
+id = "ferrite.git.refresh"
+title = "Refresh"
+
+[[commands]]
+id = "ferrite.git.init"
+title = "Initialize Repository"
+
+[[commands]]
+id = "ferrite.git.commit"
+title = "Commit"
+
+[[commands]]
+id = "ferrite.git.commitStaged"
+title = "Commit Staged"
+
+[[commands]]
+id = "ferrite.git.commitAll"
+title = "Commit All"
+
+[[commands]]
+id = "ferrite.git.commitAmend"
+title = "Commit (Amend)"
+
+[[commands]]
+id = "ferrite.git.undoCommit"
+title = "Undo Last Commit"
+
+[[commands]]
+id = "ferrite.git.stageAll"
+title = "Stage All Changes"
+
+[[commands]]
+id = "ferrite.git.unstageAll"
+title = "Unstage All Changes"
+
+[[commands]]
+id = "ferrite.git.discardAll"
+title = "Discard All Changes"
+
+# Commands for the views' items and buttons.
+[[commands]]
+id = "ferrite.git.stage"
+title = "Stage Changes"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.unstage"
+title = "Unstage Changes"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.discard"
+title = "Discard Changes"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.open"
+title = "Open File"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.viewAsTree"
+title = "View as Tree"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.viewAsList"
+title = "View as List"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.loadMore"
+title = "Load More Commits"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.commitDetails"
+title = "Open Commit Details"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.trust"
+title = "Trust Folder"
+hidden = true
+
+# Run by the editor, not the user.
+[[commands]]
+id = "ferrite.git.folderChanged"
+title = "Open Folder Changed"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.filesChanged"
+title = "Files Changed"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.jobFinished"
+title = "Git Finished"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.answered"
+title = "Answered"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.expandCommit"
+title = "List a Commit's Files"
+hidden = true
+
+# The Changes view's header.
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.commit"
+inline = true
+icon = "check"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.refresh"
+inline = true
+icon = "refresh"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.commit"
+group = "1_commit"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.commitStaged"
+group = "1_commit"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.commitAll"
+group = "1_commit"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.commitAmend"
+group = "1_commit"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.undoCommit"
+group = "1_commit"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.stageAll"
+group = "2_changes"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.unstageAll"
+group = "2_changes"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.discardAll"
+group = "2_changes"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.viewAsTree"
+group = "3_view"
+when = "!tree"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.viewAsList"
+group = "3_view"
+when = "tree"
+
+# The Changes view's groups.
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["staged-group"]
+command = "ferrite.git.unstageAll"
+inline = true
+icon = "remove"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["changes-group"]
+command = "ferrite.git.discardAll"
+inline = true
+icon = "undo"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["changes-group"]
+command = "ferrite.git.stageAll"
+inline = true
+icon = "add"
+
+# The Changes view's files.
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["staged", "changed", "untracked", "merge"]
+command = "ferrite.git.open"
+inline = true
+icon = "file"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["changed", "untracked"]
+command = "ferrite.git.discard"
+inline = true
+icon = "undo"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["changed", "untracked", "merge"]
+command = "ferrite.git.stage"
+inline = true
+icon = "add"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["staged"]
+command = "ferrite.git.unstage"
+inline = true
+icon = "remove"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["staged", "changed", "untracked", "merge"]
+command = "ferrite.git.open"
+group = "1_open"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["changed", "untracked", "merge"]
+command = "ferrite.git.stage"
+group = "2_modify"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["staged"]
+command = "ferrite.git.unstage"
+group = "2_modify"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["changed", "untracked"]
+command = "ferrite.git.discard"
+group = "2_modify"
+
+# The Commits view.
+[[menus]]
+location = "view/title"
+view = "commits"
+command = "ferrite.git.refresh"
+inline = true
+icon = "refresh"
+when = "repository"
+
+[[menus]]
+location = "view/item"
+view = "commits"
+contexts = ["commit"]
+command = "ferrite.git.commitDetails"
+
+[[menus]]
+location = "view/item"
+view = "commits"
+contexts = ["commit-file"]
+command = "ferrite.git.open"
+inline = true
+icon = "file"
+
+[[status_items]]
+id = "branch"
+alignment = "left"
+priority = 100
+
+[configuration.explorer_marks]
+type = "boolean"
+default = true
+description = "Show the Git status of files in the explorer: their color and a letter (M, A, R, U, or ! for a conflict). Deleted files are not in the explorer, so they are not marked."
+
+[configuration.smart_commit]
+type = "string"
+default = "ask"
+choices = ["ask", "always", "never"]
+description = "When you commit with no staged changes: ask whether to stage all changes and commit them, always do, or never do."
+
+[configuration.discard_untracked]
+type = "string"
+default = "trash"
+choices = ["trash", "delete"]
+description = "Discarding an untracked file deletes it: move it to the Recycle Bin (or Trash), where you can restore it, or delete it permanently."
+
+[configuration.changes_view]
+type = "string"
+default = "list"
+choices = ["list", "tree"]
+description = "Show changed files as a list (with their folders), or as a tree of folders."
+
+# The explorer's colors. Themes and [workbench.colors] can change them, as
+# "ferrite.git.modified" and so on.
+[colors.modified]
+description = "Files with changes"
+dark = "#e2c08d"
+light = "#895503"
+
+[colors.added]
+description = "Files added to the index"
+dark = "#81b88b"
+light = "#587c0c"
+
+[colors.deleted]
+description = "Deleted files"
+dark = "#c74e39"
+light = "#ad0707"
+
+[colors.renamed]
+description = "Renamed files"
+dark = "#73c991"
+light = "#007100"
+
+[colors.untracked]
+description = "Files Git doesn't track"
+dark = "#73c991"
+light = "#007100"
+
+[colors.conflict]
+description = "Files with merge conflicts"
+dark = "#e4676b"
+light = "#ad0707"
