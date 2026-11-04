@@ -1,7 +1,7 @@
 # Git
 
-Source control with Git: stage and commit changes, browse the history of the current branch,
-see the Git status of files in the explorer, and the branch you're on.
+Source control with Git: stage and commit changes, see them side by side, browse the history of
+the current branch, see the Git status of files in the explorer, and the branch you're on.
 
 ## Source Control
 
@@ -12,7 +12,9 @@ sections.
 (files with conflicts), **Staged Changes**, and **Changes**. Each file shows its status letter
 and color, and a deleted file is struck through.
 
-- **Click a file** to open it.
+- **Click a file** to see its changes in a diff tab: under **Changes**, the index against the
+  file (which you can edit there); under **Staged Changes**, the last commit against the index.
+  An untracked file, or one with a conflict, opens instead.
 - **Buttons on a file** (on hover or when selected) open it, stage it (**+**), unstage it
   (**−**), or discard its changes (**↶**). Right-click for the same. Select several files (Ctrl-
   or Shift-click) to act on them all.
@@ -30,8 +32,31 @@ and color, and a deleted file is struck through.
 
 **Commits** lists the commits of the current branch, newest first, 50 at a time (**Load More
 Commits** for the rest). Hover over one for its author, date, and hash. Open one to list the
-files it changed, or right-click it and choose **Open Commit Details** for a tab with its whole
-message, author, committer, and changed files with the lines added and removed.
+files it changed (click one to see what the commit changed in it), or right-click it and choose
+**Open Commit Details** for a tab with its whole message, author, committer, and changed files
+with the lines added and removed.
+
+**Git: Open Changes** (in the command palette, and on a file's menu in the explorer) shows the
+changes to the active or chosen file.
+
+## Changes in the editor
+
+As you edit a file Git tracks, the lines that differ from the index are marked beside the line
+numbers: green for added lines, blue for changed ones, and a red wedge where lines were removed.
+Click a marker (or press Alt+F3 for the next change, Shift+Alt+F3 for the previous) to see the
+lines the change replaced, with buttons to **stage** just that change, **revert** it, or move to
+the next or previous one. **Git: Stage Selected Ranges** (also on the editor's menu) and **Diff:
+Revert Selected Ranges** act on the changes your selections touch, in an editor or in a diff
+tab. Tabs show their file's status like the explorer: its color and letter.
+
+## Diff tabs
+
+The last commit's, the index's, and older commits' versions of a file show beside the newer
+version, with changed lines and characters marked. Unchanged lines away from changes collapse;
+click a bar to show them. The buttons beside the tabs (and **Diff** commands) go to the next
+(F7) or previous (Shift+F7) change, switch between side by side and inline, show or ignore
+whitespace at the ends of lines, and collapse unchanged lines or not. A diff tab updates as you
+edit the file, stage, or commit.
 
 In a folder that isn't a repository, the view offers **Initialize Repository**. In a folder you
 haven't trusted, it offers **Trust Folder**: Git doesn't run there until you do.
@@ -62,6 +87,7 @@ or a pull in the terminal).
 
 ## Permissions
 
+- **Read open documents**: to know the active document's file, for **Open Changes**.
 - **Run programs on this computer**: Git. Git can run code from the repository it works on
   (hooks, and programs its configuration names), so it runs only in folders you trust.
 - **Read the files in the open folder**: to notice when they change.

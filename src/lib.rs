@@ -1,6 +1,10 @@
 //! Git for Ferrite: the Git status of files in the explorer, the current
 //! branch in the status bar, and the Source Control views: changes to stage,
 //! unstage, discard, and commit, and the commits of the current branch.
+//! Changed files open in diff tabs, comparing versions the extension
+//! provides (see `diff.rs`), and editors mark lines changed from the index
+//! as they're edited, with each change revertible or stageable on its own
+//! (the editor's quick diff, for which the index version is the original).
 //!
 //! When a trusted folder opens, the extension asks Git for the repository
 //! the folder is in, watches the folder (and the repository's `.git`
@@ -9,6 +13,7 @@
 //! meanwhile run one more. Commands that change the repository run one
 //! after another, each followed by a status.
 
+mod diff;
 mod history;
 mod panel;
 mod status;
@@ -16,9 +21,11 @@ mod status;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 
+use ferrite_extension_api::documents;
 use ferrite_extension_api::explorer::{self, FileMark};
 use ferrite_extension_api::processes::{self, ProcessError, ProcessOptions, ProcessOutput};
 use ferrite_extension_api::prompts::{self, AnswerValue, ConfirmOptions, InputOptions};
+use ferrite_extension_api::quick_diff;
 use ferrite_extension_api::types::{
   Activation, CommandContext, ConfigValue, DocumentChange, DocumentId, DocumentInfo, LogLevel,
   MessageLevel, PreviewElement, PreviewNode, PreviewOptions, StatusItem,
@@ -26,7 +33,7 @@ use ferrite_extension_api::types::{
 use ferrite_extension_api::views::{self, Welcome, WelcomeButton};
 use ferrite_extension_api::{Guest, export_extension, files, host, workbench, workspace};
 
-use crate::history::{Commit, DETAILS_FORMAT, LOG_FORMAT};
+use crate::history::{Commit, DETAILS_FORMAT, FileChange, LOG_FORMAT};
 use crate::status::{Kind, Status, branch_text, branch_tooltip};
 
 const JOB_FINISHED: &str = "ferrite.git.jobFinished";
@@ -1030,6 +1037,263 @@ fn undo_commit() {
   ));
 }
 
+/// Shows changes in a diff tab.
+fn open_diff(sides: diff::Sides) {
+  if let Err(problem) = documents::open_diff(&sides.original, &sides.modified, &sides.title) {
+    error(&format!("Showing the changes failed: {problem:?}"));
+  }
+}
+
+/// The diff `sides` picks for a file's status entry, if it has one.
+fn entry_diff(
+  path: &str,
+  sides: impl Fn(&status::Entry) -> Option<diff::Sides>,
+) -> Option<diff::Sides> {
+  with_state(|state| {
+    let entry = state
+      .status
+      .as_ref()?
+      .entries
+      .iter()
+      .find(|entry| entry.path.trim_end_matches('/') == path)?;
+    sides(entry)
+  })
+}
+
+/// Shows changed files' changes not staged: the index against the file.
+/// One with nothing to compare opens instead.
+fn open_changes(paths: Vec<String>) {
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  for path in paths.iter().take(10) {
+    match entry_diff(path, |entry| diff::working(entry, absolute(&root, path))) {
+      Some(sides) => open_diff(sides),
+      None => open(vec![path.clone()]),
+    }
+  }
+}
+
+/// Shows staged files' changes: `HEAD` against the index.
+fn open_staged_changes(paths: Vec<String>) {
+  for path in paths.iter().take(10) {
+    match entry_diff(path, diff::staged) {
+      Some(sides) => open_diff(sides),
+      None => open(vec![path.clone()]),
+    }
+  }
+}
+
+/// The files a commit changed (against its first parent).
+fn commit_changes(root: &str, hash: &str) -> Result<Vec<FileChange>, String> {
+  let output = processes::run(
+    "git",
+    &args(&[
+      "diff-tree",
+      "--no-commit-id",
+      "-r",
+      "--name-status",
+      "-z",
+      "--root",
+      "-m",
+      "--first-parent",
+      hash,
+    ]),
+    &options(root),
+  );
+  match output {
+    Ok(output) if output.exit_code == Some(0) => Ok(history::parse_name_status(&output.stdout)),
+    Ok(output) => Err(failure(&output)),
+    Err(problem) => Err(format!("{problem:?}")),
+  }
+}
+
+/// Shows what commits did to files: each argument is `<hash>/<path>`.
+fn open_commit_changes(files: Vec<String>) {
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  for file in files.iter().take(10) {
+    let Some((hash, path)) = file.split_once('/') else {
+      continue;
+    };
+    match commit_changes(&root, hash) {
+      Ok(changes) => match changes.iter().find(|change| change.path == path) {
+        Some(change) => open_diff(diff::commit(hash, change)),
+        None => info(&format!("The commit didn't change {path}.")),
+      },
+      Err(message) => error(&format!("Showing the commit's changes failed: {message}")),
+    }
+  }
+}
+
+/// Opens files from commits (`<hash>/<path>`) as they are on disk.
+fn open_commit_files(files: Vec<String>) {
+  open(
+    files
+      .iter()
+      .filter_map(|file| file.split_once('/').map(|(_, path)| path.to_owned()))
+      .collect(),
+  );
+}
+
+/// "Open Changes" for a file (the explorer's, as an absolute path) or the
+/// active document: its changes not staged, else its staged ones.
+fn open_file_changes(context: &CommandContext) {
+  let Some((root, _)) = repository() else {
+    return info("The open folder isn't in a Git repository.");
+  };
+  let path = workbench::command_argument().or_else(|| {
+    let document = host::document(context.document?).ok()?;
+    document.path
+  });
+  let Some(path) = path else {
+    return info("Open a file to see its changes.");
+  };
+  if !is_within(&path, &root) {
+    return info(&format!("{path} isn't in the repository."));
+  }
+  let relative = relative_path(&root, &path).unwrap_or_default();
+  let sides = entry_diff(&relative, |entry| {
+    diff::working(entry, path.clone()).or_else(|| diff::staged(entry))
+  });
+  match sides {
+    Some(sides) => open_diff(sides),
+    None => info(&format!("{relative} has no changes.")),
+  }
+}
+
+/// Provides the text at a `git:` address (see `diff.rs`); a version that
+/// doesn't exist is empty.
+fn provide() {
+  let Some(uri) = documents::requested() else {
+    return;
+  };
+  let text = diff::parse(&uri).and_then(|(revision, path)| {
+    if revision == diff::EMPTY {
+      return Some(String::new());
+    }
+    let (root, _) = repository()?;
+    let object = format!("{revision}:{path}");
+    let output = processes::run(
+      "git",
+      &args(&["cat-file", "blob", &object]),
+      &options(&root),
+    )
+    .ok()?;
+    (output.exit_code == Some(0)).then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+  });
+  if let Err(problem) = documents::provide(&uri, text.as_deref()) {
+    log(LogLevel::Warn, &format!("can't provide {uri}: {problem:?}"));
+  }
+}
+
+/// The index or HEAD moved: diff tabs and change markers showing their
+/// versions update, and files that became tracked (or stopped being) get
+/// an original (or lose it).
+fn versions_changed() {
+  if let Err(problem) = documents::changed(&["git::*".into(), "git:HEAD:*".into()]) {
+    log(LogLevel::Warn, &format!("can't refresh diffs: {problem:?}"));
+  }
+  if let Err(problem) = quick_diff::originals_changed(&[]) {
+    log(
+      LogLevel::Warn,
+      &format!("can't refresh change markers: {problem:?}"),
+    );
+  }
+}
+
+/// A file's path relative to the repository's top folder, with `/`, if
+/// it's in the repository.
+fn relative_path(root: &str, path: &str) -> Option<String> {
+  is_within(path, root).then(|| {
+    path[root.len()..]
+      .trim_start_matches(['/', '\\'])
+      .replace('\\', "/")
+  })
+}
+
+/// Names a file's original for change markers: its version in the index,
+/// if Git tracks it.
+fn original() {
+  let Some(path) = quick_diff::requested_file() else {
+    return;
+  };
+  let uri = repository().and_then(|(root, _)| {
+    let relative = relative_path(&root, &path).filter(|relative| !relative.is_empty())?;
+    let tracked = processes::run(
+      "git",
+      &with_paths(
+        &["ls-files", "--error-unmatch"],
+        std::slice::from_ref(&relative),
+      ),
+      &options(&root),
+    );
+    matches!(tracked, Ok(output) if output.exit_code == Some(0))
+      .then(|| diff::address("", &relative))
+  });
+  if let Err(problem) = quick_diff::set_original(&path, uri.as_deref()) {
+    log(
+      LogLevel::Warn,
+      &format!("can't name {path}'s original: {problem:?}"),
+    );
+  }
+}
+
+/// Stages changes the editor chose: makes the index version of a file the
+/// text it gives (its index version with those changes made).
+fn stage_changes() {
+  let Some(applied) = quick_diff::to_apply() else {
+    return;
+  };
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  let Some(("", path)) = diff::parse(&applied.uri) else {
+    return error("Only changes to the index can be staged.");
+  };
+  let run = |command: &[&str], stdin: Option<Vec<u8>>| -> Result<String, String> {
+    let mut options = options(&root);
+    options.stdin = stdin;
+    match processes::run("git", &args(command), &options) {
+      Ok(output) if output.exit_code == Some(0) => {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+      }
+      Ok(output) => Err(failure(&output)),
+      Err(problem) => Err(format!("{problem:?}")),
+    }
+  };
+  let staged = (|| {
+    // Its mode in the index (an executable stays one).
+    let entry = run(&["ls-files", "-s", "--", path], None)?;
+    let mode = entry
+      .split_whitespace()
+      .next()
+      .filter(|mode| !mode.is_empty())
+      .unwrap_or("100644")
+      .to_owned();
+    let object = run(
+      &["hash-object", "-w", "--stdin", &format!("--path={path}")],
+      Some(applied.text.into_bytes()),
+    )?;
+    run(
+      &[
+        "update-index",
+        "--cacheinfo",
+        &format!("{mode},{object},{path}"),
+      ],
+      None,
+    )
+  })();
+  match staged {
+    Ok(_) => {
+      versions_changed();
+      refresh();
+    }
+    Err(message) => error(&format!("Staging failed: {message}")),
+  }
+}
+
 /// Opens changed files in the editor.
 fn open(paths: Vec<String>) {
   let Some((root, _)) = repository() else {
@@ -1052,30 +1316,9 @@ fn expand_commit() {
     return;
   };
   let hash = expanding.item;
-  let output = processes::run(
-    "git",
-    &args(&[
-      "diff-tree",
-      "--no-commit-id",
-      "-r",
-      "--name-status",
-      "-z",
-      "--root",
-      "-m",
-      "--first-parent",
-      &hash,
-    ]),
-    &options(&root),
-  );
-  let changes = match output {
-    Ok(output) if output.exit_code == Some(0) => history::parse_name_status(&output.stdout),
-    Ok(output) => {
-      return error(&format!(
-        "Listing the commit's files failed: {}",
-        failure(&output)
-      ));
-    }
-    Err(problem) => return error(&format!("Listing the commit's files failed: {problem:?}")),
+  let changes = match commit_changes(&root, &hash) {
+    Ok(changes) => changes,
+    Err(message) => return error(&format!("Listing the commit's files failed: {message}")),
   };
   let items = panel::commit_files(&hash, &changes);
   if let Err(problem) = views::set_children(COMMITS, &hash, &items) {
@@ -1308,6 +1551,15 @@ fn files_changed() {
       if changes.overflow || changes.paths.iter().any(|path| matters(path, &git_dir)) {
         refresh();
       }
+      // The index or HEAD may have moved: diff tabs showing them update.
+      let versions = changes.overflow
+        || changes
+          .paths
+          .iter()
+          .any(|path| is_within(path, &git_dir) && matters(path, &git_dir));
+      if versions {
+        versions_changed();
+      }
     }
     // Not a repository yet: did one appear?
     None => {
@@ -1350,7 +1602,7 @@ impl Guest for Git {
 
   fn deactivate() {}
 
-  fn run_command(command: String, _: CommandContext) -> Result<(), String> {
+  fn run_command(command: String, context: CommandContext) -> Result<(), String> {
     match command.trim_start_matches("ferrite.git.") {
       "refresh" | "folderChanged" => start(),
       "jobFinished" => job_finished(),
@@ -1359,6 +1611,19 @@ impl Guest for Git {
       "trust" => workspace::request_trust(),
       "init" => initialize(),
       "open" => open(chosen()),
+      "openChange" => open_changes(chosen()),
+      "openStagedChange" => open_staged_changes(chosen()),
+      "openCommitChange" => open_commit_changes(chosen()),
+      "openCommitFile" => open_commit_files(chosen()),
+      "openFileChanges" => open_file_changes(&context),
+      "provide" => provide(),
+      "original" => original(),
+      "stageChanges" => stage_changes(),
+      "stageSelectedRanges" => {
+        if let Err(problem) = quick_diff::apply_selected_ranges() {
+          error(&format!("Staging failed: {problem:?}"));
+        }
+      }
       "stage" => stage(chosen()),
       "unstage" => unstage(chosen()),
       "discard" => discard(chosen()),

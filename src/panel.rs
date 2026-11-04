@@ -3,7 +3,9 @@
 //! of folders, and the Commits view's commits.
 //!
 //! Item arguments are paths relative to the repository's top folder, with
-//! `/`, as Git takes them; a commit's argument is its hash.
+//! `/`, as Git takes them; a commit's argument is its hash, and a file in a
+//! commit's is `<hash>/<path>`. Clicking a changed file shows its changes;
+//! an untracked or conflicted one opens.
 
 use std::collections::BTreeSet;
 
@@ -49,6 +51,15 @@ impl Group {
     }
   }
 
+  /// The command a click on a file in it runs.
+  fn command(self, kind: Kind) -> &'static str {
+    match (self, kind) {
+      (Self::Staged, _) => "ferrite.git.openStagedChange",
+      (Self::Changes, Kind::Untracked) | (Self::Merge, _) => "ferrite.git.open",
+      (Self::Changes, _) => "ferrite.git.openChange",
+    }
+  }
+
   /// The context menus match a file in it by.
   fn context(self, kind: Kind) -> &'static str {
     match (self, kind) {
@@ -88,14 +99,28 @@ fn mark(kind: Kind) -> ItemMark {
   }
 }
 
-fn file_item(
+struct FileItem<'a> {
   id: String,
   parent: String,
-  path: &str,
+  path: &'a str,
   kind: Kind,
-  context: &str,
+  context: &'a str,
   description: Option<String>,
-) -> TreeItem {
+  command: &'a str,
+  argument: String,
+}
+
+fn file_item(file: FileItem) -> TreeItem {
+  let FileItem {
+    id,
+    parent,
+    path,
+    kind,
+    context,
+    description,
+    command,
+    argument,
+  } = file;
   let (name, _) = split(path);
   TreeItem {
     id,
@@ -107,8 +132,8 @@ fn file_item(
     mark: Some(mark(kind)),
     context: Some(context.into()),
     expansion: Expansion::None,
-    command: Some("ferrite.git.open".into()),
-    argument: Some(path.into()),
+    command: Some(command.into()),
+    argument: Some(argument),
   }
 }
 
@@ -182,27 +207,31 @@ pub fn changes(status: &Status, tree: bool) -> (Vec<TreeItem>, usize) {
       }
       for (entry, kind) in files {
         let path = entry.path.trim_end_matches('/');
-        items.push(file_item(
-          format!("{}:{path}", group.id()),
-          parent_of(path),
+        items.push(file_item(FileItem {
+          id: format!("{}:{path}", group.id()),
+          parent: parent_of(path),
           path,
-          *kind,
-          group.context(*kind),
-          None,
-        ));
+          kind: *kind,
+          context: group.context(*kind),
+          description: None,
+          command: group.command(*kind),
+          argument: path.into(),
+        }));
       }
     } else {
       for (entry, kind) in files {
         let path = entry.path.trim_end_matches('/');
         let (_, folder) = split(path);
-        items.push(file_item(
-          format!("{}:{path}", group.id()),
-          group_id.clone(),
+        items.push(file_item(FileItem {
+          id: format!("{}:{path}", group.id()),
+          parent: group_id.clone(),
           path,
-          *kind,
-          group.context(*kind),
-          (!folder.is_empty()).then(|| folder.to_owned()),
-        ));
+          kind: *kind,
+          context: group.context(*kind),
+          description: (!folder.is_empty()).then(|| folder.to_owned()),
+          command: group.command(*kind),
+          argument: path.into(),
+        }));
       }
     }
   }
@@ -257,14 +286,17 @@ pub fn commit_files(hash: &str, changes: &[FileChange]) -> Vec<TreeItem> {
     .iter()
     .map(|change| {
       let (_, folder) = split(&change.path);
-      let mut item = file_item(
-        format!("{hash}/{}", change.path),
-        hash.to_owned(),
-        &change.path,
-        change.kind,
-        "commit-file",
-        (!folder.is_empty()).then(|| folder.to_owned()),
-      );
+      let id = format!("{hash}/{}", change.path);
+      let mut item = file_item(FileItem {
+        id: id.clone(),
+        parent: hash.to_owned(),
+        path: &change.path,
+        kind: change.kind,
+        context: "commit-file",
+        description: (!folder.is_empty()).then(|| folder.to_owned()),
+        command: "ferrite.git.openCommitChange",
+        argument: id,
+      });
       if let Some(original) = &change.original {
         item.tooltip = Some(format!("{} • Renamed from {original}", change.path));
       }
@@ -322,6 +354,12 @@ u UU N... 100644 100644 100644 100644 a b c both.rs\0\
       .expect("listed");
     assert!(gone.mark.as_ref().is_some_and(|mark| mark.strikethrough));
     assert_eq!(gone.argument.as_deref(), Some("gone.rs"));
+    assert_eq!(gone.command.as_deref(), Some("ferrite.git.openChange"));
+    let notes = items
+      .iter()
+      .find(|item| item.id == "changes:notes.txt")
+      .expect("listed");
+    assert_eq!(notes.command.as_deref(), Some("ferrite.git.open"));
     let main = items
       .iter()
       .find(|item| item.id == "staged:src/app/main.rs")
@@ -374,5 +412,10 @@ u UU N... 100644 100644 100644 100644 a b c both.rs\0\
     );
     assert_eq!(files[0].id, "abc/a/b.rs");
     assert_eq!(files[0].parent.as_deref(), Some("abc"));
+    assert_eq!(files[0].argument.as_deref(), Some("abc/a/b.rs"));
+    assert_eq!(
+      files[0].command.as_deref(),
+      Some("ferrite.git.openCommitChange")
+    );
   }
 }

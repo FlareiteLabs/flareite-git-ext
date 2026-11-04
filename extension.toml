@@ -1,7 +1,7 @@
 id = "ferrite.git"
 name = "Git"
-version = "0.2.0"
-description = "Source control with Git: stage, commit, and browse history; file status in the explorer; the current branch."
+version = "0.3.0"
+description = "Source control with Git: stage, commit, and browse history; see changes side by side; file status in the explorer; the current branch."
 author = "Ferrite"
 icon = "icon.svg"
 api_version = "1"
@@ -10,6 +10,8 @@ activation = ["on-startup"]
 on_folder_changed = "ferrite.git.folderChanged"
 
 [permissions]
+# The file of the active document, for Open Changes.
+documents_read = true
 # Watching the open folder for changes.
 files_read = true
 # Deleting untracked files when their changes are discarded.
@@ -18,6 +20,17 @@ processes = true
 
 [[programs]]
 name = "git"
+
+# Versions of files in HEAD, the index, and commits, for diff tabs.
+[[text_providers]]
+scheme = "git"
+command = "ferrite.git.provide"
+
+# Lines changed from the index, marked beside the text as it's edited.
+[quick_diff]
+original = "ferrite.git.original"
+apply = "ferrite.git.stageChanges"
+apply_title = "Stage"
 
 # The Source Control view: changes, with a commit message box, and commits.
 [[view_containers]]
@@ -82,6 +95,14 @@ title = "Unstage All Changes"
 id = "ferrite.git.discardAll"
 title = "Discard All Changes"
 
+[[commands]]
+id = "ferrite.git.openFileChanges"
+title = "Open Changes"
+
+[[commands]]
+id = "ferrite.git.stageSelectedRanges"
+title = "Stage Selected Ranges"
+
 # Commands for the views' items and buttons.
 [[commands]]
 id = "ferrite.git.stage"
@@ -100,6 +121,26 @@ hidden = true
 
 [[commands]]
 id = "ferrite.git.open"
+title = "Open File"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.openChange"
+title = "Open Changes"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.openStagedChange"
+title = "Open Changes"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.openCommitChange"
+title = "Open Changes"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.openCommitFile"
 title = "Open File"
 hidden = true
 
@@ -147,6 +188,21 @@ hidden = true
 [[commands]]
 id = "ferrite.git.answered"
 title = "Answered"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.provide"
+title = "Provide a Version"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.original"
+title = "Name a File's Original"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.stageChanges"
+title = "Stage Changes"
 hidden = true
 
 [[commands]]
@@ -302,6 +358,20 @@ icon = "remove"
 [[menus]]
 location = "view/item"
 view = "changes"
+contexts = ["changed"]
+command = "ferrite.git.openChange"
+group = "1_open"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["staged"]
+command = "ferrite.git.openStagedChange"
+group = "1_open"
+
+[[menus]]
+location = "view/item"
+view = "changes"
 contexts = ["staged", "changed", "untracked", "merge"]
 command = "ferrite.git.open"
 group = "1_open"
@@ -346,9 +416,36 @@ command = "ferrite.git.commitDetails"
 location = "view/item"
 view = "commits"
 contexts = ["commit-file"]
-command = "ferrite.git.open"
+command = "ferrite.git.openCommitFile"
 inline = true
 icon = "file"
+
+[[menus]]
+location = "view/item"
+view = "commits"
+contexts = ["commit-file"]
+command = "ferrite.git.openCommitChange"
+group = "1_open"
+
+[[menus]]
+location = "view/item"
+view = "commits"
+contexts = ["commit-file"]
+command = "ferrite.git.openCommitFile"
+group = "1_open"
+
+# The editor.
+[[menus]]
+location = "editor/context"
+command = "ferrite.git.stageSelectedRanges"
+group = "9_git"
+
+# The explorer's files.
+[[menus]]
+location = "explorer/context"
+targets = ["files"]
+command = "ferrite.git.openFileChanges"
+group = "7_git"
 
 [[status_items]]
 id = "branch"
