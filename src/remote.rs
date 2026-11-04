@@ -10,7 +10,7 @@
 use ferrite_extension_api::prompts::{self, AnswerValue, InputOptions, PickItem};
 use ferrite_extension_api::storage::{self, StorageScope};
 use ferrite_extension_api::types::{ConfigValue, LogLevel, StatusItem};
-use ferrite_extension_api::{host, timers, workbench};
+use ferrite_extension_api::{host, timers, workbench, workspace};
 
 use crate::status::{Branch, Status};
 use crate::{
@@ -115,6 +115,22 @@ pub enum Ask {
   Sync,
   /// Whether to fetch in the background.
   Autofetch,
+  /// A new tag's name, and the commit it's on (`None`: HEAD).
+  TagName {
+    at: Option<String>,
+  },
+  /// Its message, which makes it an annotated tag.
+  TagMessage {
+    name: String,
+    at: Option<String>,
+  },
+  /// The tag to delete.
+  DeleteTag,
+  /// The address of a repository to clone, then the folder to clone it into.
+  CloneUrl,
+  CloneInto(String),
+  /// Whether to open a cloned repository.
+  OpenCloned(String),
 }
 
 fn ask_pick(title: &str, items: Vec<PickItem>, ask: Ask) {
@@ -456,6 +472,140 @@ pub fn remove_remote() {
   }
 }
 
+pub fn create_tag(at: Option<String>) {
+  if repository().is_none() {
+    return;
+  }
+  ask_input("Tag name", "", None, Ask::TagName { at });
+}
+
+pub fn delete_tag() {
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  let tags: Vec<PickItem> = refs(&root)
+    .iter()
+    .filter(|entry| entry.kind == RefKind::Tag)
+    .take(MAX_REFS)
+    .map(ref_item)
+    .collect();
+  if tags.is_empty() {
+    return info("There are no tags.");
+  }
+  ask_pick("Select a tag to delete", tags, Ask::DeleteTag);
+}
+
+pub fn push_tags() {
+  if repository().is_some() {
+    operate(remote_operation(
+      "Pushing tags",
+      &["push", "--tags"],
+      Then::Nothing,
+    ));
+  }
+}
+
+/// Makes the changes of commits on the current branch.
+pub fn cherry_pick(commits: &[String]) {
+  for commit in commits.iter().take(1) {
+    operate(operation(
+      "Cherry-picking",
+      args(&["cherry-pick", commit]),
+      Then::Nothing,
+    ));
+  }
+}
+
+/// Undoes a commit with a new commit.
+pub fn revert_commit(commits: &[String]) {
+  for commit in commits.iter().take(1) {
+    operate(operation(
+      "Reverting the commit",
+      args(&["revert", "--no-edit", commit]),
+      Then::Nothing,
+    ));
+  }
+}
+
+pub fn checkout_commit(commits: &[String]) {
+  for commit in commits.iter().take(1) {
+    operate(operation(
+      "Checking out",
+      args(&["checkout", "-q", "--detach", commit]),
+      Then::Nothing,
+    ));
+  }
+}
+
+pub fn branch_at(commits: &[String]) {
+  if let Some(commit) = commits.first() {
+    ask_input(
+      "Branch name",
+      "",
+      Some(format!(
+        "The new branch, from {}",
+        &commit[..commit.len().min(8)]
+      )),
+      Ask::NewBranch {
+        from: Some(commit.clone()),
+      },
+    );
+  }
+}
+
+/// Clones a repository: asks for its address and the folder to put it in.
+pub fn clone() {
+  ask_input(
+    "Repository URL",
+    "",
+    Some("Such as https://github.com/owner/repository.git".into()),
+    Ask::CloneUrl,
+  );
+}
+
+/// The folder a clone of `url` goes in: the last part of its path, without `.git`.
+pub fn repository_name(url: &str) -> String {
+  let name = url
+    .trim_end_matches(['/', '\\'])
+    .rsplit(['/', '\\', ':'])
+    .next()
+    .unwrap_or_default();
+  let name = name.strip_suffix(".git").unwrap_or(name);
+  if name.is_empty() {
+    "repository".to_owned()
+  } else {
+    name.to_owned()
+  }
+}
+
+fn clone_into(url: &str, parent: &str) {
+  let separator = if parent.contains('\\') { "\\" } else { "/" };
+  let target = format!(
+    "{}{separator}{}",
+    parent.trim_end_matches(['/', '\\']),
+    repository_name(url)
+  );
+  let mut clone = remote_operation(
+    "Cloning",
+    &["clone", "--progress", url, &target],
+    Then::OfferOpen(target.clone()),
+  );
+  clone.cwd = Some(parent.to_owned());
+  operate(clone);
+}
+
+/// After a clone: asks whether to open it.
+pub fn offer_open(path: String) {
+  let detail = path.clone();
+  ask_confirm(
+    "Open the cloned repository?",
+    &detail,
+    &["Open"],
+    false,
+    Pending::Remote(Ask::OpenCloned(path)),
+  );
+}
+
 /// The user answered a question asked here.
 pub fn answered(ask: Ask, value: AnswerValue) {
   let typed = |text: &str| (!text.trim().is_empty()).then(|| text.trim().to_owned());
@@ -546,6 +696,54 @@ pub fn answered(ask: Ask, value: AnswerValue) {
         );
       }
       do_sync();
+    }
+    (Ask::TagName { at }, AnswerValue::Text(name)) => {
+      if let Some(name) = typed(&name) {
+        ask_input(
+          "Tag message",
+          "",
+          Some("Optional: a message makes an annotated tag".into()),
+          Ask::TagMessage {
+            name: branch_name(&name),
+            at,
+          },
+        );
+      }
+    }
+    (Ask::TagMessage { name, at }, AnswerValue::Text(message)) => {
+      let message = message.trim().to_owned();
+      let mut tag = vec!["tag"];
+      if !message.is_empty() {
+        tag.extend(["-a", "-m", message.as_str()]);
+      }
+      tag.push(&name);
+      if let Some(at) = &at {
+        tag.push(at);
+      }
+      operate(operation("Creating the tag", args(&tag), Then::Nothing));
+    }
+    (Ask::DeleteTag, AnswerValue::Picked(full)) => operate(operation(
+      "Deleting the tag",
+      args(&["tag", "-d", short(&full)]),
+      Then::Nothing,
+    )),
+    (Ask::CloneUrl, AnswerValue::Text(url)) => {
+      if let Some(url) = typed(&url) {
+        match prompts::pick_folder("Choose the folder to clone the repository into", ANSWERED) {
+          Ok(id) => with_state(|state| {
+            state
+              .prompts
+              .insert(id, Pending::Remote(Ask::CloneInto(url)));
+          }),
+          Err(problem) => error(&format!("Couldn't ask: {problem:?}")),
+        }
+      }
+    }
+    (Ask::CloneInto(url), AnswerValue::Text(parent)) => clone_into(&url, &parent),
+    (Ask::OpenCloned(path), AnswerValue::Button(0)) => {
+      if let Err(problem) = workspace::open_folder(&path) {
+        error(&format!("Opening the repository failed: {problem:?}"));
+      }
     }
     (Ask::Autofetch, AnswerValue::Button(0)) => {
       if let Err(problem) = host::set_configuration("autofetch", Some(&ConfigValue::Boolean(true)))
@@ -702,6 +900,10 @@ refs/tags/v1.0\0v1.0\0abc1234\0Fix it\n",
     );
     assert_eq!(short("refs/remotes/origin/feature"), "origin/feature");
     assert_eq!(branch_name("  my  new feature "), "my-new-feature");
+    assert_eq!(repository_name("https://github.com/owner/tool.git"), "tool");
+    assert_eq!(repository_name("git@github.com:owner/tool.git/"), "tool");
+    assert_eq!(repository_name(r"C:\code\tool"), "tool");
+    assert_eq!(repository_name(""), "repository");
   }
 
   #[test]

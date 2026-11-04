@@ -252,9 +252,10 @@ pub fn commits(commits: &[Commit], more: bool) -> Vec<TreeItem> {
       id: commit.hash.clone(),
       parent: None,
       label: commit.subject.clone(),
-      description: Some(format!("{}, {}", commit.author, commit.relative)),
+      description: Some(commit_description(commit)),
       tooltip: Some(commit.tooltip()),
-      icon: ItemIcon::Named("commit".into()),
+      // The history graph beside it draws its node.
+      icon: ItemIcon::None,
       mark: None,
       context: Some("commit".into()),
       expansion: Expansion::Collapsed,
@@ -278,6 +279,16 @@ pub fn commits(commits: &[Commit], more: bool) -> Vec<TreeItem> {
     });
   }
   items
+}
+
+/// A commit's description: the branches and tags on it, then who and when.
+fn commit_description(commit: &Commit) -> String {
+  let refs = commit.refs.replace("HEAD -> ", "");
+  if refs.trim().is_empty() {
+    format!("{}, {}", commit.author, commit.relative)
+  } else {
+    format!("{} · {}, {}", refs.trim(), commit.author, commit.relative)
+  }
 }
 
 /// The files a commit changed, as children of its item.

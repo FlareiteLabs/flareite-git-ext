@@ -14,10 +14,13 @@
 //! after another, each followed by a status.
 
 mod diff;
+mod graph;
 mod history;
 mod panel;
 mod remote;
+mod stash;
 mod status;
+mod timeline;
 
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -93,6 +96,8 @@ enum Then {
   Restart,
   /// Push (after a sync's pull).
   Push,
+  /// Offer to open a repository just cloned.
+  OfferOpen(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,6 +124,8 @@ enum Pending {
   },
   /// About branches and remotes.
   Remote(remote::Ask),
+  /// About stashes.
+  Stash(stash::Ask),
 }
 
 #[derive(Default)]
@@ -359,7 +366,10 @@ fn start() {
   clear_output();
 
   let Some(folder) = workspace::folder() else {
-    welcome("Open a folder to use Git.", &[]);
+    welcome(
+      "Open a folder to use Git, or clone a repository.",
+      &[("Clone Repository", "ferrite.git.clone")],
+    );
     return;
   };
   if !folder.trusted {
@@ -403,7 +413,10 @@ fn start() {
     );
     welcome(
       "The open folder isn't in a Git repository.",
-      &[("Initialize Repository", "ferrite.git.init")],
+      &[
+        ("Initialize Repository", "ferrite.git.init"),
+        ("Clone Repository", "ferrite.git.clone"),
+      ],
     );
     return;
   }
@@ -430,6 +443,8 @@ fn start() {
   set_changes_flags();
   refresh();
   remote::schedule_autofetch();
+  stash::load();
+  timeline::load();
 }
 
 fn set_changes_flags() {
@@ -671,20 +686,26 @@ fn load_commits(skip: usize) {
   };
   let count = format!("-n{}", PAGE + 1);
   let skip_arg = format!("--skip={skip}");
-  spawn(
-    Job::Log { skip },
-    &args(&[
-      "--no-optional-locks",
-      "log",
-      LOG_FORMAT,
-      &count,
-      &skip_arg,
-      "HEAD",
-      "--",
-    ]),
-    &root,
-    None,
-  );
+  let mut log_args = args(&[
+    "--no-optional-locks",
+    "log",
+    "--topo-order",
+    LOG_FORMAT,
+    &count,
+    &skip_arg,
+    "HEAD",
+  ]);
+  // The branch it follows too, as in VS Code's graph.
+  if with_state(|state| {
+    state
+      .status
+      .as_ref()
+      .is_some_and(|status| status.branch.upstream.is_some())
+  }) {
+    log_args.push("@{upstream}".into());
+  }
+  log_args.push("--".into());
+  spawn(Job::Log { skip }, &log_args, &root, None);
 }
 
 fn log_finished(skip: usize, outcome: Result<ProcessOutput, ProcessError>) {
@@ -709,11 +730,21 @@ fn log_finished(skip: usize, outcome: Result<ProcessOutput, ProcessError>) {
       state.commits.extend(page);
     }
     state.more_commits = more;
-    panel::commits(&state.commits, more)
+    (
+      panel::commits(&state.commits, more),
+      graph::lay_out(&state.commits),
+    )
   });
+  let (items, rows) = items;
   let _ = views::set_welcome(COMMITS, None);
   if let Err(problem) = views::set_items(COMMITS, &items) {
     log(LogLevel::Error, &format!("can't list commits: {problem:?}"));
+  }
+  if let Err(problem) = views::set_graph(COMMITS, &rows) {
+    log(
+      LogLevel::Error,
+      &format!("can't draw the history graph: {problem:?}"),
+    );
   }
 }
 
@@ -724,12 +755,11 @@ fn operate(operation: Operation) {
 }
 
 fn next_operation() {
-  let Some((root, _)) = repository().or_else(|| {
-    // `git init` runs before there's a repository.
-    with_state(|state| state.folder.clone()).map(|folder| (folder.clone(), folder))
-  }) else {
-    return;
-  };
+  // `git init` runs before there's a repository, and a clone maybe without
+  // a folder.
+  let root = repository()
+    .map(|(root, _)| root)
+    .or_else(|| with_state(|state| state.folder.clone()));
   let Some(operation) = with_state(|state| {
     if state.operating {
       return None;
@@ -740,7 +770,10 @@ fn next_operation() {
   }) else {
     return;
   };
-  let cwd = operation.cwd.clone().unwrap_or(root);
+  let Some(cwd) = operation.cwd.clone().or(root) else {
+    with_state(|state| state.operating = false);
+    return next_operation();
+  };
   let (operation_args, stdin) = (operation.args.clone(), operation.stdin.clone());
   if operation.remote {
     with_state(|state| state.busy = Some(operation.title.clone()));
@@ -758,8 +791,11 @@ fn operation_finished(operation: Operation, outcome: Result<ProcessOutput, Proce
     with_state(|state| state.busy = None);
     remote::update_sync();
   }
-  let reached_remote =
-    operation.remote && matches!(&outcome, Ok(output) if output.exit_code == Some(0));
+  // A clone asks whether to open it instead of offering background fetches,
+  // which would replace that question.
+  let reached_remote = operation.remote
+    && !matches!(operation.then, Then::OfferOpen(_))
+    && matches!(&outcome, Ok(output) if output.exit_code == Some(0));
   let succeeded = match outcome {
     Ok(output) if output.exit_code == Some(0) => true,
     Ok(output) => {
@@ -787,9 +823,13 @@ fn operation_finished(operation: Operation, outcome: Result<ProcessOutput, Proce
       Then::Push => {
         with_state(|state| state.operations.push_front(remote::sync_push()));
       }
+      Then::OfferOpen(path) => remote::offer_open(path),
     }
   }
   refresh();
+  // Stashes may have changed, and with a commit, the file's history.
+  stash::load();
+  timeline::load();
   next_operation();
   if reached_remote {
     remote::offer_autofetch();
@@ -1359,6 +1399,43 @@ fn stage_changes() {
   }
 }
 
+/// Adds files or folders (absolute paths, from the explorer) to the
+/// repository's `.gitignore`.
+fn add_to_gitignore(paths: Vec<String>) {
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  let lines: Vec<String> = paths
+    .iter()
+    .filter_map(|path| relative_path(&root, path))
+    .filter(|relative| !relative.is_empty())
+    .collect();
+  if lines.is_empty() {
+    return info("Only files in the repository can be ignored.");
+  }
+  let file = absolute(&root, ".gitignore");
+  let mut text = match files::read_file(&file) {
+    Ok(text) => text,
+    Err(files::FileError::NotFound) => String::new(),
+    Err(problem) => return error(&format!("Reading .gitignore failed: {problem:?}")),
+  };
+  let known: Vec<String> = text.lines().map(|line| line.trim().to_owned()).collect();
+  let mut added = false;
+  for line in lines {
+    if !known.contains(&line) {
+      if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+      }
+      text.push_str(&line);
+      text.push('\n');
+      added = true;
+    }
+  }
+  if added && let Err(problem) = files::write_file(&file, &text) {
+    error(&format!("Changing .gitignore failed: {problem:?}"));
+  }
+}
+
 /// Opens changed files in the editor.
 fn open(paths: Vec<String>) {
   let Some((root, _)) = repository() else {
@@ -1564,6 +1641,7 @@ fn answered() {
       do_discard(tracked, untracked);
     }
     (Pending::Remote(ask), value) => remote::answered(ask, value),
+    (Pending::Stash(ask), value) => stash::answered(ask, value),
     _ => {}
   }
 }
@@ -1625,6 +1703,13 @@ fn files_changed() {
           .any(|path| is_within(path, &git_dir) && matters(path, &git_dir));
       if versions {
         versions_changed();
+        timeline::load();
+      }
+      // A stash made or dropped outside Ferrite.
+      if changes.paths.iter().any(|path| {
+        is_within(path, &git_dir) && path.trim_end_matches(['/', '\\']).ends_with("stash")
+      }) {
+        stash::load();
       }
     }
     // Not a repository yet: did one appear?
@@ -1701,6 +1786,28 @@ impl Guest for Git {
       "addRemote" => remote::add_remote(),
       "removeRemote" => remote::remove_remote(),
       "autofetch" => remote::autofetch(),
+      "activeFileChanged" => timeline::load(),
+      "expandStash" => stash::expand(),
+      "stash" => stash::stash(Vec::new()),
+      "stashIncludeUntracked" => stash::stash(vec!["--include-untracked"]),
+      "stashStaged" => stash::stash(vec!["--staged"]),
+      "stashApply" => stash::apply(&chosen(), false),
+      "stashPop" => stash::apply(&chosen(), true),
+      "stashDrop" => stash::drop(&chosen()),
+      "stashApplyLatest" if stash::has_stashes() => stash::apply(&[], false),
+      "stashPopLatest" if stash::has_stashes() => stash::apply(&[], true),
+      "stashApplyLatest" | "stashPopLatest" => {}
+      "stashDropAll" => stash::drop_all(),
+      "createTag" => remote::create_tag(None),
+      "createTagAt" => remote::create_tag(chosen().into_iter().next()),
+      "deleteTag" => remote::delete_tag(),
+      "pushTags" => remote::push_tags(),
+      "cherryPick" => remote::cherry_pick(&chosen()),
+      "revertCommit" => remote::revert_commit(&chosen()),
+      "checkoutCommit" => remote::checkout_commit(&chosen()),
+      "branchAt" => remote::branch_at(&chosen()),
+      "clone" => remote::clone(),
+      "addToGitignore" => add_to_gitignore(chosen()),
       "original" => original(),
       "stageChanges" => stage_changes(),
       "stageSelectedRanges" => {

@@ -39,6 +39,25 @@ with the lines added and removed.
 **Git: Open Changes** (in the command palette, and on a file's menu in the explorer) shows the
 changes to the active or chosen file.
 
+The Commits view draws the history graph beside the commits, VS Code's way: the current branch
+and the branch it follows, with lanes forking and joining at merges, and branch and tag names
+beside the commits they're on. Right-click a commit to **Checkout (Detached)**, **Create
+Branch…** or **Create Tag…** there, **Cherry-Pick** it onto the current branch, or **Revert** it
+with a new commit.
+
+**Stashes** lists your stashes, newest first. Stash from its **+** button (or the "…" menus:
+with untracked files, or only staged changes). Each stash has buttons to **apply** (✓), **pop**
+(apply and drop), and **drop** it; open one to see its files, which open to show what it
+changed. Dropping asks first.
+
+**File History** follows the file you're editing: its changes not committed yet, then the
+commits that changed it, newest first and across renames. Click one to see what it changed in
+the file.
+
+**Git: Clone…** asks for a repository's address and a folder to put it in, clones it (signing in
+if needed), and offers to open it. It's also on Source Control's welcome when no repository is
+open. **Add to .gitignore** is on the explorer's menu.
+
 ## Branches and remotes
 
 Click the branch in the status bar to switch: pick a branch (a remote branch checks out as a

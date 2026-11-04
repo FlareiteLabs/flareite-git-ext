@@ -8,6 +8,7 @@ api_version = "1"
 entrypoint = "../target/wasm32-unknown-unknown/release/git.wasm"
 activation = ["on-startup"]
 on_folder_changed = "ferrite.git.folderChanged"
+on_active_file_changed = "ferrite.git.activeFileChanged"
 
 [permissions]
 # The file of the active document, for Open Changes.
@@ -52,6 +53,17 @@ id = "commits"
 title = "Commits"
 container = "scm"
 on_expand = "ferrite.git.expandCommit"
+
+[[views]]
+id = "stashes"
+title = "Stashes"
+container = "scm"
+on_expand = "ferrite.git.expandStash"
+
+[[views]]
+id = "file-history"
+title = "File History"
+container = "scm"
 
 [[previews]]
 id = "commit"
@@ -165,6 +177,101 @@ title = "Add Remote…"
 [[commands]]
 id = "ferrite.git.removeRemote"
 title = "Remove Remote…"
+
+[[commands]]
+id = "ferrite.git.stash"
+title = "Stash"
+
+[[commands]]
+id = "ferrite.git.stashIncludeUntracked"
+title = "Stash (Include Untracked)"
+
+[[commands]]
+id = "ferrite.git.stashStaged"
+title = "Stash Staged"
+
+[[commands]]
+id = "ferrite.git.stashApplyLatest"
+title = "Apply Latest Stash"
+
+[[commands]]
+id = "ferrite.git.stashPopLatest"
+title = "Pop Latest Stash"
+
+[[commands]]
+id = "ferrite.git.stashDropAll"
+title = "Drop All Stashes…"
+
+[[commands]]
+id = "ferrite.git.createTag"
+title = "Create Tag…"
+
+[[commands]]
+id = "ferrite.git.deleteTag"
+title = "Delete Tag…"
+
+[[commands]]
+id = "ferrite.git.pushTags"
+title = "Push Tags"
+
+[[commands]]
+id = "ferrite.git.clone"
+title = "Clone…"
+
+[[commands]]
+id = "ferrite.git.stashApply"
+title = "Apply Stash"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.stashPop"
+title = "Pop Stash"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.stashDrop"
+title = "Drop Stash"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.expandStash"
+title = "List a Stash's Files"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.createTagAt"
+title = "Create Tag…"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.cherryPick"
+title = "Cherry-Pick Commit"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.revertCommit"
+title = "Revert Commit"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.checkoutCommit"
+title = "Checkout (Detached)"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.branchAt"
+title = "Create Branch…"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.addToGitignore"
+title = "Add to .gitignore"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.activeFileChanged"
+title = "Active File Changed"
+hidden = true
 
 [[commands]]
 id = "ferrite.git.stageSelectedRanges"
@@ -623,6 +730,185 @@ group = "1_open"
 location = "editor/context"
 command = "ferrite.git.stageSelectedRanges"
 group = "9_git"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.stash"
+group = "7_stash"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.stashIncludeUntracked"
+group = "7_stash"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.stashStaged"
+group = "7_stash"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.createTag"
+group = "8_tags"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.deleteTag"
+group = "8_tags"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.pushTags"
+group = "8_tags"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "stashes"
+command = "ferrite.git.stash"
+inline = true
+icon = "add"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "stashes"
+command = "ferrite.git.stashIncludeUntracked"
+group = "1_stash"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "stashes"
+command = "ferrite.git.stashStaged"
+group = "1_stash"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "stashes"
+command = "ferrite.git.stashApplyLatest"
+group = "1_stash"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "stashes"
+command = "ferrite.git.stashPopLatest"
+group = "1_stash"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "stashes"
+command = "ferrite.git.stashDropAll"
+group = "1_stash"
+when = "repository"
+
+[[menus]]
+location = "view/item"
+view = "stashes"
+contexts = ["stash"]
+command = "ferrite.git.stashApply"
+inline = true
+icon = "check"
+
+[[menus]]
+location = "view/item"
+view = "stashes"
+contexts = ["stash"]
+command = "ferrite.git.stashPop"
+inline = true
+icon = "download"
+
+[[menus]]
+location = "view/item"
+view = "stashes"
+contexts = ["stash"]
+command = "ferrite.git.stashDrop"
+inline = true
+icon = "close"
+
+[[menus]]
+location = "view/item"
+view = "stashes"
+contexts = ["stash"]
+command = "ferrite.git.stashApply"
+group = "1_stash"
+
+[[menus]]
+location = "view/item"
+view = "stashes"
+contexts = ["stash"]
+command = "ferrite.git.stashPop"
+group = "1_stash"
+
+[[menus]]
+location = "view/item"
+view = "stashes"
+contexts = ["stash"]
+command = "ferrite.git.stashDrop"
+group = "1_stash"
+
+[[menus]]
+location = "view/item"
+view = "stashes"
+contexts = ["commit-file"]
+command = "ferrite.git.openCommitFile"
+inline = true
+icon = "file"
+
+[[menus]]
+location = "view/item"
+view = "commits"
+contexts = ["commit"]
+command = "ferrite.git.checkoutCommit"
+group = "2_refs"
+
+[[menus]]
+location = "view/item"
+view = "commits"
+contexts = ["commit"]
+command = "ferrite.git.branchAt"
+group = "2_refs"
+
+[[menus]]
+location = "view/item"
+view = "commits"
+contexts = ["commit"]
+command = "ferrite.git.createTagAt"
+group = "2_refs"
+
+[[menus]]
+location = "view/item"
+view = "commits"
+contexts = ["commit"]
+command = "ferrite.git.cherryPick"
+group = "3_apply"
+
+[[menus]]
+location = "view/item"
+view = "commits"
+contexts = ["commit"]
+command = "ferrite.git.revertCommit"
+group = "3_apply"
+
+[[menus]]
+location = "explorer/context"
+targets = ["files", "folders"]
+command = "ferrite.git.addToGitignore"
+group = "7_git"
 
 # The explorer's files.
 [[menus]]
