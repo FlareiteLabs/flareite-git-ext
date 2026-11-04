@@ -39,6 +39,30 @@ with the lines added and removed.
 **Git: Open Changes** (in the command palette, and on a file's menu in the explorer) shows the
 changes to the active or chosen file.
 
+## Branches and remotes
+
+Click the branch in the status bar to switch: pick a branch (a remote branch checks out as a
+local branch following it), a tag, **+ Create New Branch…**, **+ Create New Branch From…**, or
+**Checkout Detached…**. Beside it, the sync button shows how many commits the branch is behind
+(↓) and ahead of (↑) the branch it follows; click it to pull, then push (Git asks the first time;
+answer **OK, Don't Ask Again** to stop that). A branch that follows none shows **↑ Publish**
+instead, which pushes it to a remote and follows it from then on.
+
+The "…" menu of **Changes**, and the command palette, have **Pull**, **Pull (Rebase)**, **Push**,
+**Sync**, **Fetch**, **Fetch (Prune)**, **Fetch From All Remotes**, **Checkout to…**, **Create
+Branch…**, **Create Branch From…**, **Rename Branch…**, **Delete Branch…** (one that isn't merged
+is deleted only after asking), **Merge Branch…**, **Publish Branch**, **Add Remote…**, and
+**Remove Remote…**.
+
+**Signing in.** When a remote needs a username and password (or SSH a key's passphrase), Ferrite
+asks you in the command palette, hiding what you type for passwords. Git Credential Manager or an
+SSH agent, if you have one, answers first. What you type goes to Git, not to the extension.
+
+**Fetching in the background** is off by default. After your first pull, push, or fetch, Ferrite
+offers once to turn it on; or set `autofetch` (and `autofetch_period`, in seconds) yourself.
+
+Every Git command and what it says when it fails are in the **Output** view, under **Git**.
+
 ## Changes in the editor
 
 As you edit a file Git tracks, the lines that differ from the index are marked beside the line
@@ -69,8 +93,8 @@ haven't trusted, it offers **Trust Folder**: Git doesn't run there until you do.
   they don't color it either (Source Control lists them). Files Git ignores are dimmed, as
   always.
 - **In the status bar**, the branch you're on (or the commit, when HEAD is detached), with `*`
-  when there are changes, and how far it is ahead of (↑) and behind (↓) its upstream. Click it
-  to look again (**Git: Refresh**).
+  when there are changes; click it to switch branches. Beside it, the sync button (see
+  [Branches and remotes](#branches-and-remotes)).
 
 Everything updates as files change, including changes Git makes itself (a commit, a checkout,
 or a pull in the terminal).
@@ -88,7 +112,7 @@ or a pull in the terminal).
 ## Permissions
 
 - **Read open documents**: to know the active document's file, for **Open Changes**.
-- **Run programs on this computer**: Git. Git can run code from the repository it works on
+- **Run programs on this computer**: Git, which can ask you to sign in to remotes. Git can run code from the repository it works on
   (hooks, and programs its configuration names), so it runs only in folders you trust.
 - **Read the files in the open folder**: to notice when they change.
 - **Change and create files in the open folder**: to delete untracked files when you discard
@@ -102,6 +126,9 @@ or a pull in the terminal).
 | `smart_commit`      | `ask`   | With nothing staged, `ask` whether to commit everything, `always`, or `never`. |
 | `discard_untracked` | `trash` | Discarding an untracked file moves it to the `trash`, or `delete`s it.         |
 | `changes_view`      | `list`  | Show changed files as a `list` or a `tree` of folders.                         |
+| `autofetch`         | `false` | Fetch from the remotes in the background.                                      |
+| `autofetch_period`  | `180`   | How often to fetch in the background, in seconds (at least 30).                |
+| `confirm_sync`      | `true`  | Ask before syncing (pulling, then pushing).                                    |
 
 The colors are theme colors a theme or `[workbench.colors]` can change: `ferrite.git.modified`,
 `ferrite.git.added`, `ferrite.git.deleted`, `ferrite.git.renamed`, `ferrite.git.untracked`, and

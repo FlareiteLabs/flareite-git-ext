@@ -18,8 +18,11 @@ files_read = true
 files_write = true
 processes = true
 
+# Git can ask for a username and password, or SSH for a key's
+# passphrase: Ferrite asks you.
 [[programs]]
 name = "git"
+askpass = true
 
 # Versions of files in HEAD, the index, and commits, for diff tabs.
 [[text_providers]]
@@ -98,6 +101,70 @@ title = "Discard All Changes"
 [[commands]]
 id = "ferrite.git.openFileChanges"
 title = "Open Changes"
+
+[[commands]]
+id = "ferrite.git.checkout"
+title = "Checkout to…"
+
+[[commands]]
+id = "ferrite.git.createBranch"
+title = "Create Branch…"
+
+[[commands]]
+id = "ferrite.git.createBranchFrom"
+title = "Create Branch From…"
+
+[[commands]]
+id = "ferrite.git.renameBranch"
+title = "Rename Branch…"
+
+[[commands]]
+id = "ferrite.git.deleteBranch"
+title = "Delete Branch…"
+
+[[commands]]
+id = "ferrite.git.mergeBranch"
+title = "Merge Branch…"
+
+[[commands]]
+id = "ferrite.git.publish"
+title = "Publish Branch"
+
+[[commands]]
+id = "ferrite.git.fetch"
+title = "Fetch"
+
+[[commands]]
+id = "ferrite.git.fetchPrune"
+title = "Fetch (Prune)"
+
+[[commands]]
+id = "ferrite.git.fetchAll"
+title = "Fetch From All Remotes"
+
+[[commands]]
+id = "ferrite.git.pull"
+title = "Pull"
+
+[[commands]]
+id = "ferrite.git.pullRebase"
+title = "Pull (Rebase)"
+
+[[commands]]
+id = "ferrite.git.push"
+title = "Push"
+
+[[commands]]
+id = "ferrite.git.sync"
+title = "Sync"
+
+[[commands]]
+id = "ferrite.git.addRemote"
+title = "Add Remote…"
+
+[[commands]]
+id = "ferrite.git.removeRemote"
+title = "Remove Remote…"
 
 [[commands]]
 id = "ferrite.git.stageSelectedRanges"
@@ -206,6 +273,11 @@ title = "Stage Changes"
 hidden = true
 
 [[commands]]
+id = "ferrite.git.autofetch"
+title = "Fetch in the Background"
+hidden = true
+
+[[commands]]
 id = "ferrite.git.expandCommit"
 title = "List a Commit's Files"
 hidden = true
@@ -281,6 +353,118 @@ location = "view/title"
 view = "changes"
 command = "ferrite.git.discardAll"
 group = "2_changes"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.pull"
+group = "4_remote"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.pullRebase"
+group = "4_remote"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.push"
+group = "4_remote"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.sync"
+group = "4_remote"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.fetch"
+group = "4_remote"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.fetchPrune"
+group = "4_remote"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.fetchAll"
+group = "4_remote"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.checkout"
+group = "5_branch"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.createBranch"
+group = "5_branch"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.createBranchFrom"
+group = "5_branch"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.renameBranch"
+group = "5_branch"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.deleteBranch"
+group = "5_branch"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.mergeBranch"
+group = "5_branch"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.publish"
+group = "5_branch"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.addRemote"
+group = "6_remote"
+when = "repository"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.removeRemote"
+group = "6_remote"
 when = "repository"
 
 [[menus]]
@@ -452,6 +636,12 @@ id = "branch"
 alignment = "left"
 priority = 100
 
+# How far the branch is behind and ahead: click to sync (or to publish it).
+[[status_items]]
+id = "sync"
+alignment = "left"
+priority = 99
+
 [configuration.explorer_marks]
 type = "boolean"
 default = true
@@ -474,6 +664,22 @@ type = "string"
 default = "list"
 choices = ["list", "tree"]
 description = "Show changed files as a list (with their folders), or as a tree of folders."
+
+[configuration.autofetch]
+type = "boolean"
+default = false
+description = "Fetch from the remotes in the background, every autofetch_period seconds."
+
+[configuration.autofetch_period]
+type = "integer"
+default = 180
+minimum = 30
+description = "How often to fetch in the background, in seconds, when autofetch is on."
+
+[configuration.confirm_sync]
+type = "boolean"
+default = true
+description = "Ask before syncing (pulling, then pushing) with the branch's upstream."
 
 # The explorer's colors. Themes and [workbench.colors] can change them, as
 # "ferrite.git.modified" and so on.

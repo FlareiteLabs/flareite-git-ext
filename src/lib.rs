@@ -16,6 +16,7 @@
 mod diff;
 mod history;
 mod panel;
+mod remote;
 mod status;
 
 use std::cell::RefCell;
@@ -64,6 +65,8 @@ enum Job {
     skip: usize,
   },
   Operation(Operation),
+  /// A fetch in the background, whose failures are only logged.
+  Fetch,
 }
 
 /// A command that changes the repository.
@@ -75,6 +78,8 @@ struct Operation {
   /// Where it runs: the repository's top folder by default.
   cwd: Option<String>,
   then: Then,
+  /// It reaches a remote: the status bar shows it while it runs.
+  remote: bool,
 }
 
 /// What to do once an operation succeeds.
@@ -86,6 +91,8 @@ enum Then {
   SetMessage(String),
   /// Look for the repository again (after `git init`).
   Restart,
+  /// Push (after a sync's pull).
+  Push,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,6 +117,8 @@ enum Pending {
     tracked: Vec<String>,
     untracked: Vec<String>,
   },
+  /// About branches and remotes.
+  Remote(remote::Ask),
 }
 
 #[derive(Default)]
@@ -135,6 +144,10 @@ struct State {
   prompts: HashMap<u64, Pending>,
   /// Git wasn't found, and the user was told.
   told_missing: bool,
+  /// What a command reaching a remote is doing, while it runs.
+  busy: Option<String>,
+  /// The timer of the next background fetch.
+  autofetch_timer: Option<u64>,
 }
 
 thread_local! {
@@ -302,6 +315,11 @@ fn welcome(text: &str, buttons: &[(&str, &str)]) {
 fn clear_output() {
   let _ = explorer::set_file_marks(&[]);
   let _ = workbench::set_status_item("branch", None);
+  let _ = workbench::set_status_item("sync", None);
+  // No repository: nothing to fetch.
+  if let Some(timer) = with_state(|state| state.autofetch_timer.take()) {
+    ferrite_extension_api::timers::clear_timer(timer);
+  }
   for view in [CHANGES, COMMITS] {
     let _ = views::set_items(view, &[]);
     let _ = views::set_welcome(view, None);
@@ -363,8 +381,7 @@ fn start() {
   // a repository.
   watch(&path);
 
-  let found = processes::run(
-    "git",
+  let found = run_git(
     &args(&["rev-parse", "--show-toplevel", "--absolute-git-dir"]),
     &options(&path),
   );
@@ -412,6 +429,7 @@ fn start() {
   let _ = views::set_flags(COMMITS, &flags);
   set_changes_flags();
   refresh();
+  remote::schedule_autofetch();
 }
 
 fn set_changes_flags() {
@@ -430,10 +448,44 @@ fn watch(path: &str) {
 }
 
 /// Starts a program in the repository for a job.
+/// Notes a Git command in the extension's output (the Output view's Git).
+fn log_command(args: &[String]) {
+  log(LogLevel::Info, &format!("> git {}", args.join(" ")));
+}
+
+/// Notes what a failed Git command said.
+fn log_outcome(outcome: &Result<ProcessOutput, ProcessError>) {
+  match outcome {
+    Ok(output) if output.exit_code != Some(0) => {
+      let said = String::from_utf8_lossy(&output.stderr);
+      log(
+        LogLevel::Warn,
+        &format!(
+          "git exited with {}: {}",
+          output
+            .exit_code
+            .map_or_else(|| "a signal".to_owned(), |code| code.to_string()),
+          said.trim().chars().take(4_000).collect::<String>()
+        ),
+      );
+    }
+    Ok(_) => {}
+    Err(problem) => log(LogLevel::Warn, &format!("git didn't finish: {problem:?}")),
+  }
+}
+
+/// Runs Git and waits for it, within the running command's deadline.
+fn run_git(args: &[String], options: &ProcessOptions) -> Result<ProcessOutput, ProcessError> {
+  log_command(args);
+  let outcome = processes::run("git", args, options);
+  log_outcome(&outcome);
+  outcome
+}
+
 fn spawn(job: Job, args: &[String], cwd: &str, stdin: Option<Vec<u8>>) -> bool {
   let mut options = options(cwd);
   options.stdin = stdin;
-  log(LogLevel::Info, &format!("git {}", args.join(" ")));
+  log_command(args);
   match processes::spawn("git", args, &options, JOB_FINISHED) {
     Ok(id) => {
       with_state(|state| state.jobs.insert(id, job));
@@ -487,10 +539,12 @@ fn job_finished() {
   let Some(job) = with_state(|state| state.jobs.remove(&finished.process)) else {
     return;
   };
+  log_outcome(&finished.outcome);
   match job {
     Job::Status => status_finished(finished.outcome),
     Job::Log { skip } => log_finished(skip, finished.outcome),
     Job::Operation(operation) => operation_finished(operation, finished.outcome),
+    Job::Fetch => refresh(),
   }
 }
 
@@ -566,7 +620,7 @@ fn show(status: Status) {
     Some(&StatusItem {
       text: branch_text(&status),
       tooltip: Some(branch_tooltip(&status)),
-      command: Some("ferrite.git.refresh".into()),
+      command: Some("ferrite.git.checkout".into()),
     }),
   );
 
@@ -590,6 +644,7 @@ fn show(status: Status) {
     state.status = Some(status);
     reload
   });
+  remote::update_sync();
   if reload {
     match head {
       Some(_) => load_commits(0),
@@ -687,6 +742,10 @@ fn next_operation() {
   };
   let cwd = operation.cwd.clone().unwrap_or(root);
   let (operation_args, stdin) = (operation.args.clone(), operation.stdin.clone());
+  if operation.remote {
+    with_state(|state| state.busy = Some(operation.title.clone()));
+    remote::update_sync();
+  }
   if !spawn(Job::Operation(operation), &operation_args, &cwd, stdin) {
     with_state(|state| state.operating = false);
     next_operation();
@@ -695,6 +754,12 @@ fn next_operation() {
 
 fn operation_finished(operation: Operation, outcome: Result<ProcessOutput, ProcessError>) {
   with_state(|state| state.operating = false);
+  if operation.remote {
+    with_state(|state| state.busy = None);
+    remote::update_sync();
+  }
+  let reached_remote =
+    operation.remote && matches!(&outcome, Ok(output) if output.exit_code == Some(0));
   let succeeded = match outcome {
     Ok(output) if output.exit_code == Some(0) => true,
     Ok(output) => {
@@ -719,10 +784,16 @@ fn operation_finished(operation: Operation, outcome: Result<ProcessOutput, Proce
         start();
         return next_operation();
       }
+      Then::Push => {
+        with_state(|state| state.operations.push_front(remote::sync_push()));
+      }
     }
   }
   refresh();
   next_operation();
+  if reached_remote {
+    remote::offer_autofetch();
+  }
 }
 
 fn operation(title: &str, operation_args: Vec<String>, then: Then) -> Operation {
@@ -732,6 +803,7 @@ fn operation(title: &str, operation_args: Vec<String>, then: Then) -> Operation 
     stdin: None,
     cwd: None,
     then,
+    remote: false,
   }
 }
 
@@ -1000,6 +1072,7 @@ fn commit_operation(message: String, amend: bool) -> Operation {
     stdin: (!keep).then(|| message.into_bytes()),
     cwd: None,
     then: Then::ClearMessage,
+    remote: false,
   }
 }
 
@@ -1012,8 +1085,7 @@ fn undo_commit() {
   if !has_head() {
     return info("There's no commit to undo.");
   }
-  let last = processes::run(
-    "git",
+  let last = run_git(
     &args(&["log", "-1", "--format=%P%x1f%B", "HEAD"]),
     &options(&root),
   );
@@ -1086,8 +1158,7 @@ fn open_staged_changes(paths: Vec<String>) {
 
 /// The files a commit changed (against its first parent).
 fn commit_changes(root: &str, hash: &str) -> Result<Vec<FileChange>, String> {
-  let output = processes::run(
-    "git",
+  let output = run_git(
     &args(&[
       "diff-tree",
       "--no-commit-id",
@@ -1175,12 +1246,7 @@ fn provide() {
     }
     let (root, _) = repository()?;
     let object = format!("{revision}:{path}");
-    let output = processes::run(
-      "git",
-      &args(&["cat-file", "blob", &object]),
-      &options(&root),
-    )
-    .ok()?;
+    let output = run_git(&args(&["cat-file", "blob", &object]), &options(&root)).ok()?;
     (output.exit_code == Some(0)).then(|| String::from_utf8_lossy(&output.stdout).into_owned())
   });
   if let Err(problem) = documents::provide(&uri, text.as_deref()) {
@@ -1221,8 +1287,7 @@ fn original() {
   };
   let uri = repository().and_then(|(root, _)| {
     let relative = relative_path(&root, &path).filter(|relative| !relative.is_empty())?;
-    let tracked = processes::run(
-      "git",
+    let tracked = run_git(
       &with_paths(
         &["ls-files", "--error-unmatch"],
         std::slice::from_ref(&relative),
@@ -1255,7 +1320,7 @@ fn stage_changes() {
   let run = |command: &[&str], stdin: Option<Vec<u8>>| -> Result<String, String> {
     let mut options = options(&root);
     options.stdin = stdin;
-    match processes::run("git", &args(command), &options) {
+    match run_git(&args(command), &options) {
       Ok(output) if output.exit_code == Some(0) => {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
       }
@@ -1335,7 +1400,7 @@ fn commit_details(hash: &str) {
     return;
   };
   let run = |command: &[&str]| -> Result<Vec<u8>, String> {
-    match processes::run("git", &args(command), &options(&root)) {
+    match run_git(&args(command), &options(&root)) {
       Ok(output) if output.exit_code == Some(0) => Ok(output.stdout),
       Ok(output) => Err(failure(&output)),
       Err(problem) => Err(format!("{problem:?}")),
@@ -1498,6 +1563,7 @@ fn answered() {
     (Pending::Discard { tracked, untracked }, AnswerValue::Button(0)) => {
       do_discard(tracked, untracked);
     }
+    (Pending::Remote(ask), value) => remote::answered(ask, value),
     _ => {}
   }
 }
@@ -1589,6 +1655,7 @@ fn initialize() {
     stdin: None,
     cwd: Some(folder),
     then: Then::Restart,
+    remote: false,
   });
 }
 
@@ -1617,6 +1684,23 @@ impl Guest for Git {
       "openCommitFile" => open_commit_files(chosen()),
       "openFileChanges" => open_file_changes(&context),
       "provide" => provide(),
+      "checkout" => remote::checkout(),
+      "createBranch" => remote::create_branch(),
+      "createBranchFrom" => remote::create_branch_from(),
+      "renameBranch" => remote::rename_branch(),
+      "deleteBranch" => remote::delete_branch(),
+      "mergeBranch" => remote::merge_branch(),
+      "publish" => remote::publish(),
+      "fetch" => remote::fetch(&[]),
+      "fetchPrune" => remote::fetch(&["--prune"]),
+      "fetchAll" => remote::fetch(&["--all"]),
+      "pull" => remote::pull(false),
+      "pullRebase" => remote::pull(true),
+      "push" => remote::push(),
+      "sync" => remote::sync(),
+      "addRemote" => remote::add_remote(),
+      "removeRemote" => remote::remove_remote(),
+      "autofetch" => remote::autofetch(),
       "original" => original(),
       "stageChanges" => stage_changes(),
       "stageSelectedRanges" => {

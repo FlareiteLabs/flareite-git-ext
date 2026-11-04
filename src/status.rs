@@ -281,7 +281,7 @@ fn branch_header(branch: &mut Branch, header: &str) {
 }
 
 /// The status bar's text for the branch: its name (or the commit, when
-/// detached), `*` with changes, and how far it is from its upstream.
+/// detached), and `*` with changes.
 pub fn branch_text(status: &Status) -> String {
   let branch = &status.branch;
   let name = match (&branch.head, &branch.oid) {
@@ -289,15 +289,10 @@ pub fn branch_text(status: &Status) -> String {
     (None, Some(oid)) => oid.chars().take(8).collect(),
     (None, None) => "(no commits)".to_owned(),
   };
+  // How far it's ahead and behind shows on the sync button.
   let mut text = name;
   if status.dirty() {
     text.push('*');
-  }
-  if branch.behind > 0 {
-    text.push_str(&format!(" ↓{}", branch.behind));
-  }
-  if branch.ahead > 0 {
-    text.push_str(&format!(" ↑{}", branch.ahead));
   }
   text
 }
@@ -399,7 +394,7 @@ u UU N... 100644 100644 100644 100644 aaaa bbbb cccc both.rs\0\
   #[test]
   fn describes_the_branch_for_the_status_bar() {
     let status = parse(OUTPUT);
-    assert_eq!(branch_text(&status), "main* ↓1 ↑2");
+    assert_eq!(branch_text(&status), "main*");
     assert_eq!(
       branch_tooltip(&status),
       "Git: on branch main\n2 ahead of and 1 behind origin/main\n8 changed files"
