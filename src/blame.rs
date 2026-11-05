@@ -11,10 +11,10 @@
 
 use std::collections::HashMap;
 
-use ferrite_extension_api::host;
-use ferrite_extension_api::processes::{ProcessError, ProcessOutput};
-use ferrite_extension_api::types::{CommandContext, ConfigValue, DocumentId, StatusItem};
-use ferrite_extension_api::workbench::{self, LineAnnotation};
+use flareite_extension_api::host;
+use flareite_extension_api::processes::{ProcessError, ProcessOutput};
+use flareite_extension_api::types::{CommandContext, ConfigValue, DocumentId, StatusItem};
+use flareite_extension_api::workbench::{self, LineAnnotation};
 
 use crate::{Job, args, options, relative_path, run_git, spawn, with_state};
 
@@ -302,7 +302,7 @@ fn update() {
   let item = status_on.then(|| StatusItem {
     text: status,
     tooltip: Some(tooltip),
-    command: hash.map(|_| "ferrite.git.blameDetails".into()),
+    command: hash.map(|_| "flareite.git.blameDetails".into()),
   });
   let _ = workbench::set_status_item("blame", item.as_ref());
 }

@@ -9,7 +9,7 @@
 
 use std::collections::BTreeSet;
 
-use ferrite_extension_api::views::{Expansion, ItemIcon, ItemMark, TreeItem};
+use flareite_extension_api::views::{Expansion, ItemIcon, ItemMark, TreeItem};
 
 use crate::history::{Commit, FileChange};
 use crate::status::{Entry, Kind, Status};
@@ -54,10 +54,10 @@ impl Group {
   /// The command a click on a file in it runs.
   fn command(self, kind: Kind) -> &'static str {
     match (self, kind) {
-      (Self::Staged, _) => "ferrite.git.openStagedChange",
-      (Self::Merge, _) => "ferrite.git.openConflict",
-      (Self::Changes, Kind::Untracked) => "ferrite.git.open",
-      (Self::Changes, _) => "ferrite.git.openChange",
+      (Self::Staged, _) => "flareite.git.openStagedChange",
+      (Self::Merge, _) => "flareite.git.openConflict",
+      (Self::Changes, Kind::Untracked) => "flareite.git.open",
+      (Self::Changes, _) => "flareite.git.openChange",
     }
   }
 
@@ -275,7 +275,7 @@ pub fn commits(commits: &[Commit], more: bool) -> Vec<TreeItem> {
       mark: None,
       context: None,
       expansion: Expansion::None,
-      command: Some("ferrite.git.loadMore".into()),
+      command: Some("flareite.git.loadMore".into()),
       argument: None,
     });
   }
@@ -306,7 +306,7 @@ pub fn commit_files(hash: &str, changes: &[FileChange]) -> Vec<TreeItem> {
         kind: change.kind,
         context: "commit-file",
         description: (!folder.is_empty()).then(|| folder.to_owned()),
-        command: "ferrite.git.openCommitChange",
+        command: "flareite.git.openCommitChange",
         argument: id,
       });
       if let Some(original) = &change.original {
@@ -366,12 +366,12 @@ u UU N... 100644 100644 100644 100644 a b c both.rs\0\
       .expect("listed");
     assert!(gone.mark.as_ref().is_some_and(|mark| mark.strikethrough));
     assert_eq!(gone.argument.as_deref(), Some("gone.rs"));
-    assert_eq!(gone.command.as_deref(), Some("ferrite.git.openChange"));
+    assert_eq!(gone.command.as_deref(), Some("flareite.git.openChange"));
     let notes = items
       .iter()
       .find(|item| item.id == "changes:notes.txt")
       .expect("listed");
-    assert_eq!(notes.command.as_deref(), Some("ferrite.git.open"));
+    assert_eq!(notes.command.as_deref(), Some("flareite.git.open"));
     let main = items
       .iter()
       .find(|item| item.id == "staged:src/app/main.rs")
@@ -413,7 +413,7 @@ u UU N... 100644 100644 100644 100644 a b c both.rs\0\
     let items = commits(std::slice::from_ref(&commit), true);
     assert_eq!(items[0].description.as_deref(), Some("Ada, 2 days ago"));
     assert_eq!(items[0].expansion, Expansion::Collapsed);
-    assert_eq!(items[1].command.as_deref(), Some("ferrite.git.loadMore"));
+    assert_eq!(items[1].command.as_deref(), Some("flareite.git.loadMore"));
     let files = commit_files(
       "abc",
       &[FileChange {
@@ -427,7 +427,7 @@ u UU N... 100644 100644 100644 100644 a b c both.rs\0\
     assert_eq!(files[0].argument.as_deref(), Some("abc/a/b.rs"));
     assert_eq!(
       files[0].command.as_deref(),
-      Some("ferrite.git.openCommitChange")
+      Some("flareite.git.openCommitChange")
     );
   }
 }

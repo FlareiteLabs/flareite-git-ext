@@ -11,9 +11,9 @@
 //! status bar says what's in progress, and a commit with no message takes
 //! the one Git prepared.
 
-use ferrite_extension_api::processes::{ProcessError, ProcessOutput};
-use ferrite_extension_api::types::{LogLevel, StatusItem};
-use ferrite_extension_api::workbench;
+use flareite_extension_api::processes::{ProcessError, ProcessOutput};
+use flareite_extension_api::types::{LogLevel, StatusItem};
+use flareite_extension_api::workbench;
 
 use crate::{
   CHANGES, Job, Pending, Then, args, ask_confirm, branch_text, branch_tooltip, operate, operation,
@@ -179,7 +179,7 @@ pub fn show() {
     Some(&StatusItem {
       text,
       tooltip: Some(branch_tooltip(&status)),
-      command: Some("ferrite.git.checkout".into()),
+      command: Some("flareite.git.checkout".into()),
     }),
   );
 }

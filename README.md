@@ -97,11 +97,11 @@ with the changes that don't conflict already made. Above each change are buttons
 or both sides; above each conflict in the result, to accept either side or both, or reset it.
 You can also edit the result yourself. **Complete Merge** saves the file and stages it.
 
-**Signing in.** When a remote needs a username and password (or SSH a key's passphrase), Ferrite
+**Signing in.** When a remote needs a username and password (or SSH a key's passphrase), Flareite
 asks you in the command palette, hiding what you type for passwords. Git Credential Manager or an
 SSH agent, if you have one, answers first. What you type goes to Git, not to the extension.
 
-**Fetching in the background** is off by default. After your first pull, push, or fetch, Ferrite
+**Fetching in the background** is off by default. After your first pull, push, or fetch, Flareite
 offers once to turn it on; or set `autofetch` (and `autofetch_period`, in seconds) yourself.
 
 Every Git command and what it says when it fails are in the **Output** view, under **Git**.
@@ -170,12 +170,12 @@ or a pull in the terminal).
 
 ## Requirements
 
-[Git](https://git-scm.com) on the `PATH`. Elsewhere, tell Ferrite where it is in
+[Git](https://git-scm.com) on the `PATH`. Elsewhere, tell Flareite where it is in
 `settings.toml`:
 
 ```toml
 [extensions.programs]
-"ferrite.git.git" = "C:/Program Files/Git/cmd/git.exe"
+"flareite.git.git" = "C:/Program Files/Git/cmd/git.exe"
 ```
 
 ## Permissions
@@ -206,6 +206,6 @@ or a pull in the terminal).
 | `blame_status`      | `true`  | Show the cursor line's blame in the status bar.                                |
 | `performance`       | `auto`  | Speed up `git status` in large repositories: `auto`, `on`, or `off`.           |
 
-The colors are theme colors a theme or `[workbench.colors]` can change: `ferrite.git.modified`,
-`ferrite.git.added`, `ferrite.git.deleted`, `ferrite.git.renamed`, `ferrite.git.untracked`, and
-`ferrite.git.conflict`.
+The colors are theme colors a theme or `[workbench.colors]` can change: `flareite.git.modified`,
+`flareite.git.added`, `flareite.git.deleted`, `flareite.git.renamed`, `flareite.git.untracked`, and
+`flareite.git.conflict`.

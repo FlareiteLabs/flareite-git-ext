@@ -18,12 +18,12 @@
 
 use std::ops::Range;
 
-use ferrite_extension_api::host;
-use ferrite_extension_api::types::{
+use flareite_extension_api::host;
+use flareite_extension_api::types::{
   ApiError, CommandContext, DocumentChange, DocumentId, DocumentInfo, LogLevel, Position,
   Range as WitRange, TextEdit,
 };
-use ferrite_extension_api::workbench::{self, CodeLens};
+use flareite_extension_api::workbench::{self, CodeLens};
 
 /// One conflict's lines (zero-based) in a text.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -244,7 +244,7 @@ pub fn show(id: DocumentId) -> bool {
         line,
         title: title.into(),
         tooltip: None,
-        command: format!("ferrite.git.{command}"),
+        command: format!("flareite.git.{command}"),
         argument: argument.clone(),
       });
     }

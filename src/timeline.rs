@@ -2,9 +2,9 @@
 //! not committed yet, then the commits that changed it (following renames),
 //! newest first. Each opens what it changed in the file.
 
-use ferrite_extension_api::types::LogLevel;
-use ferrite_extension_api::views::{self, Expansion, ItemIcon, TreeItem, Welcome};
-use ferrite_extension_api::workbench;
+use flareite_extension_api::types::LogLevel;
+use flareite_extension_api::views::{self, Expansion, ItemIcon, TreeItem, Welcome};
+use flareite_extension_api::workbench;
 
 use crate::history::parse_name_status;
 use crate::{args, is_within, log, relative_path, repository, run_git, with_state};
@@ -79,7 +79,7 @@ pub fn items(uncommitted: Option<&str>, entries: &[Entry]) -> Vec<TreeItem> {
         "Uncommitted Changes".into(),
         "Not committed yet".into(),
         "edit",
-        "ferrite.git.openChange",
+        "flareite.git.openChange",
         path.into(),
       )
     })
@@ -90,7 +90,7 @@ pub fn items(uncommitted: Option<&str>, entries: &[Entry]) -> Vec<TreeItem> {
         entry.subject.clone(),
         format!("{}, {}", entry.author, entry.relative),
         "commit",
-        "ferrite.git.openCommitChange",
+        "flareite.git.openCommitChange",
         format!("{}/{}", entry.hash, entry.path),
       )
     }))
@@ -181,7 +181,7 @@ mod tests {
 
     let items = items(Some("b.txt"), &entries);
     assert_eq!(items[0].label, "Uncommitted Changes");
-    assert_eq!(items[0].command.as_deref(), Some("ferrite.git.openChange"));
+    assert_eq!(items[0].command.as_deref(), Some("flareite.git.openChange"));
     assert_eq!(items[2].argument.as_deref(), Some("175ba3/a.txt"));
     assert_eq!(items[2].description.as_deref(), Some("T, 1 second ago"));
   }

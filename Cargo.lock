@@ -21,7 +21,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
-name = "ferrite-extension-api"
+name = "flareite-extension-api"
 version = "1.0.0"
 dependencies = [
  "wit-bindgen",
@@ -37,7 +37,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 name = "git"
 version = "0.5.0"
 dependencies = [
- "ferrite-extension-api",
+ "flareite-extension-api",
 ]
 
 [[package]]

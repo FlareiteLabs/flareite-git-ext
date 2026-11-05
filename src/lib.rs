@@ -1,4 +1,4 @@
-//! Git for Ferrite: the Git status of files in the explorer, the current
+//! Git for Flareite: the Git status of files in the explorer, the current
 //! branch in the status bar, and the Source Control views: changes to stage,
 //! unstage, discard, and commit, and the commits of the current branch.
 //! Changed files open in diff tabs, comparing versions the extension
@@ -29,24 +29,24 @@ mod timeline;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use ferrite_extension_api::documents;
-use ferrite_extension_api::explorer;
-use ferrite_extension_api::processes::{self, ProcessError, ProcessOptions, ProcessOutput};
-use ferrite_extension_api::prompts::{self, AnswerValue, ConfirmOptions, InputOptions};
-use ferrite_extension_api::quick_diff;
-use ferrite_extension_api::types::{
+use flareite_extension_api::documents;
+use flareite_extension_api::explorer;
+use flareite_extension_api::processes::{self, ProcessError, ProcessOptions, ProcessOutput};
+use flareite_extension_api::prompts::{self, AnswerValue, ConfirmOptions, InputOptions};
+use flareite_extension_api::quick_diff;
+use flareite_extension_api::types::{
   Activation, CommandContext, ConfigValue, DocumentChange, DocumentId, DocumentInfo, LogLevel,
   MessageLevel, PreviewElement, PreviewNode, PreviewOptions,
 };
-use ferrite_extension_api::views::{self, Welcome, WelcomeButton};
-use ferrite_extension_api::{Guest, export_extension, files, host, workbench, workspace};
+use flareite_extension_api::views::{self, Welcome, WelcomeButton};
+use flareite_extension_api::{Guest, export_extension, files, host, workbench, workspace};
 
 use crate::history::{Commit, DETAILS_FORMAT, FileChange, LOG_FORMAT};
 use crate::status::{Kind, Status, branch_text, branch_tooltip};
 
-const JOB_FINISHED: &str = "ferrite.git.jobFinished";
-const FILES_CHANGED: &str = "ferrite.git.filesChanged";
-const ANSWERED: &str = "ferrite.git.answered";
+const JOB_FINISHED: &str = "flareite.git.jobFinished";
+const FILES_CHANGED: &str = "flareite.git.filesChanged";
+const ANSWERED: &str = "flareite.git.answered";
 /// The Source Control container's views.
 const CHANGES: &str = "changes";
 const COMMITS: &str = "commits";
@@ -325,13 +325,13 @@ fn report_missing(reason: &str) {
     host::show_message(
       MessageLevel::Warning,
       "Git was not found. Install Git (https://git-scm.com), or set where it is in the settings: \
-       \"ferrite.git.git\" under [extensions.programs].",
+       \"flareite.git.git\" under [extensions.programs].",
     );
   }
   welcome(
-    "Git was not found. Install Git, or set where it is in the settings (\"ferrite.git.git\" \
+    "Git was not found. Install Git, or set where it is in the settings (\"flareite.git.git\" \
      under [extensions.programs]), then refresh.",
-    &[("Refresh", "ferrite.git.refresh")],
+    &[("Refresh", "flareite.git.refresh")],
   );
 }
 
@@ -360,7 +360,7 @@ fn clear_output() {
   with_state(|state| state.progress = None);
   // No repository: nothing to fetch.
   if let Some(timer) = with_state(|state| state.autofetch_timer.take()) {
-    ferrite_extension_api::timers::clear_timer(timer);
+    flareite_extension_api::timers::clear_timer(timer);
   }
   let _ = views::set_items(repos::REPOSITORIES, &[]);
   let _ = views::set_visible(repos::REPOSITORIES, false);
@@ -405,7 +405,7 @@ fn start() {
   let Some(folder) = workspace::folder() else {
     welcome(
       "Open a folder to use Git, or clone a repository.",
-      &[("Clone Repository", "ferrite.git.clone")],
+      &[("Clone Repository", "flareite.git.clone")],
     );
     return;
   };
@@ -418,7 +418,7 @@ fn start() {
     welcome(
       "Git doesn't run in folders you haven't trusted, because it can run code from them \
        (hooks, and programs its configuration names).",
-      &[("Trust Folder", "ferrite.git.trust")],
+      &[("Trust Folder", "flareite.git.trust")],
     );
     return;
   }
@@ -477,8 +477,8 @@ fn start() {
         welcome(
           "The open folder isn't in a Git repository.",
           &[
-            ("Initialize Repository", "ferrite.git.init"),
-            ("Clone Repository", "ferrite.git.clone"),
+            ("Initialize Repository", "flareite.git.init"),
+            ("Clone Repository", "flareite.git.clone"),
           ],
         );
         return;
@@ -1502,7 +1502,7 @@ fn merge_editor_for(root: &str, path: &str) {
     result_file: path.to_owned(),
     title: format!("Merging: {name}"),
     reset_result: marked,
-    on_complete: Some("ferrite.git.mergeCompleted".into()),
+    on_complete: Some("flareite.git.mergeCompleted".into()),
   };
   if let Err(problem) = documents::open_merge(&options) {
     error(&format!("Opening the merge editor failed: {problem:?}"));
@@ -1972,7 +1972,7 @@ fn files_changed() {
       versions = true;
       if active.as_deref() == Some(root.as_str()) {
         timeline::load();
-        // A stash made or dropped outside Ferrite.
+        // A stash made or dropped outside Flareite.
         if changes.paths.iter().any(|path| {
           is_within(path, &git_dir) && path.trim_end_matches(['/', '\\']).ends_with("stash")
         }) {
@@ -2014,7 +2014,7 @@ impl Guest for Git {
   fn deactivate() {}
 
   fn run_command(command: String, context: CommandContext) -> Result<(), String> {
-    match command.trim_start_matches("ferrite.git.") {
+    match command.trim_start_matches("flareite.git.") {
       "refresh" | "folderChanged" => start(),
       "jobFinished" => job_finished(),
       "filesChanged" => files_changed(),

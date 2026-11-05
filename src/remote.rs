@@ -4,13 +4,13 @@
 //! background when the user turns it on.
 //!
 //! Commands that reach a remote run in the background without a time limit.
-//! Git asks for credentials through Ferrite (`askpass` in the manifest), as
+//! Git asks for credentials through Flareite (`askpass` in the manifest), as
 //! does SSH for a key's passphrase.
 
-use ferrite_extension_api::prompts::{self, AnswerValue, InputOptions, PickItem};
-use ferrite_extension_api::storage::{self, StorageScope};
-use ferrite_extension_api::types::{ConfigValue, LogLevel, StatusItem};
-use ferrite_extension_api::{host, timers, workbench, workspace};
+use flareite_extension_api::prompts::{self, AnswerValue, InputOptions, PickItem};
+use flareite_extension_api::storage::{self, StorageScope};
+use flareite_extension_api::types::{ConfigValue, LogLevel, StatusItem};
+use flareite_extension_api::{host, timers, workbench, workspace};
 
 use crate::status::{Branch, Status};
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
 };
 
 /// Run by the timer that fetches in the background.
-pub const AUTOFETCH: &str = "ferrite.git.autofetch";
+pub const AUTOFETCH: &str = "flareite.git.autofetch";
 /// Remembers that fetching in the background was offered.
 const AUTOFETCH_OFFERED: &str = "autofetchOffered";
 /// Most refs the branch picker lists (the prompt takes 1,000 items).
@@ -795,7 +795,7 @@ pub fn sync_item(status: &Status, busy: Option<&str>) -> Option<StatusItem> {
     None => StatusItem {
       text: "↑ Publish".into(),
       tooltip: Some(format!("Publish {head} to a remote")),
-      command: Some("ferrite.git.publish".into()),
+      command: Some("flareite.git.publish".into()),
     },
     Some(upstream) => {
       let commits = |count: u32| match count {
@@ -816,7 +816,7 @@ pub fn sync_item(status: &Status, busy: Option<&str>) -> Option<StatusItem> {
       StatusItem {
         text: format!("{}↓ {}↑", branch.behind, branch.ahead),
         tooltip: Some(tooltip),
-        command: Some("ferrite.git.sync".into()),
+        command: Some("flareite.git.sync".into()),
       }
     }
   })
@@ -881,7 +881,7 @@ pub fn offer_autofetch() {
   }
   let _ = storage::set(StorageScope::Global, AUTOFETCH_OFFERED, Some("true"));
   ask_confirm(
-    "Would you like Ferrite to run \"git fetch\" every few minutes?",
+    "Would you like Flareite to run \"git fetch\" every few minutes?",
     "You can change this later with the \"autofetch\" setting of Git.",
     &["Yes", "No"],
     false,
@@ -939,7 +939,7 @@ refs/tags/v1.0\0v1.0\0abc1234\0Fix it\n",
         "Synchronize changes: pull 1 commit from origin/main, and push 2 commits to origin/main"
       )
     );
-    assert_eq!(item.command.as_deref(), Some("ferrite.git.sync"));
+    assert_eq!(item.command.as_deref(), Some("flareite.git.sync"));
     assert_eq!(
       sync_item(&status, Some("Pulling")).expect("busy").text,
       "↻ Pulling…"

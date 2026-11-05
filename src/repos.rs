@@ -18,11 +18,11 @@
 //! system monitor and untracked cache, unless its configuration sets them;
 //! `on` always uses them, `off` never.
 
-use ferrite_extension_api::explorer::{self, FileMark};
-use ferrite_extension_api::files;
-use ferrite_extension_api::processes::{ProcessError, ProcessOutput};
-use ferrite_extension_api::types::{ConfigValue, LogLevel};
-use ferrite_extension_api::views::{self, Expansion, ItemIcon, TreeItem};
+use flareite_extension_api::explorer::{self, FileMark};
+use flareite_extension_api::files;
+use flareite_extension_api::processes::{ProcessError, ProcessOutput};
+use flareite_extension_api::types::{ConfigValue, LogLevel};
+use flareite_extension_api::views::{self, Expansion, ItemIcon, TreeItem};
 
 use crate::status::{Kind, Status, branch_text};
 use crate::{
@@ -431,7 +431,7 @@ pub fn update_view() {
           mark: None,
           context: Some("repository".into()),
           expansion: Expansion::None,
-          command: Some("ferrite.git.selectRepository".into()),
+          command: Some("flareite.git.selectRepository".into()),
           argument: Some(repo.root.clone()),
         }
       })

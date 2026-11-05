@@ -4,7 +4,7 @@
 //! its first parent, plus a lane for each other parent that has none. The
 //! editor draws them (`views::set-graph`).
 
-use ferrite_extension_api::views::{GraphLane, GraphRow};
+use flareite_extension_api::views::{GraphLane, GraphRow};
 
 use crate::history::Commit;
 

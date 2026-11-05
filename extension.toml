@@ -1,16 +1,16 @@
-id = "ferrite.git"
+id = "flareite.git"
 name = "Git"
 version = "0.5.0"
 description = "Source control with Git: stage, commit, and browse history; see changes side by side; file status in the explorer; the current branch."
-author = "Ferrite"
+author = "Flareite"
 icon = "icon.svg"
 api_version = "1"
 entrypoint = "target/wasm32-unknown-unknown/release/git.wasm"
 activation = ["on-startup"]
-on_folder_changed = "ferrite.git.folderChanged"
-on_active_file_changed = "ferrite.git.activeFileChanged"
+on_folder_changed = "flareite.git.folderChanged"
+on_active_file_changed = "flareite.git.activeFileChanged"
 # The cursor's line, for blame.
-on_selection_changed = "ferrite.git.selectionChanged"
+on_selection_changed = "flareite.git.selectionChanged"
 
 [permissions]
 # The file of the active document, for Open Changes; and conflicts in open
@@ -25,7 +25,7 @@ files_write = true
 processes = true
 
 # Git can ask for a username and password, or SSH for a key's
-# passphrase: Ferrite asks you.
+# passphrase: Flareite asks you.
 [[programs]]
 name = "git"
 askpass = true
@@ -33,12 +33,12 @@ askpass = true
 # Versions of files in HEAD, the index, and commits, for diff tabs.
 [[text_providers]]
 scheme = "git"
-command = "ferrite.git.provide"
+command = "flareite.git.provide"
 
 # Lines changed from the index, marked beside the text as it's edited.
 [quick_diff]
-original = "ferrite.git.original"
-apply = "ferrite.git.stageChanges"
+original = "flareite.git.original"
+apply = "flareite.git.stageChanges"
 apply_title = "Stage"
 
 # The Source Control view: changes, with a commit message box, and commits.
@@ -59,19 +59,19 @@ hidden = true
 id = "changes"
 title = "Changes"
 container = "scm"
-input = { placeholder = "Message (Ctrl+Enter to commit)", command = "ferrite.git.commit" }
+input = { placeholder = "Message (Ctrl+Enter to commit)", command = "flareite.git.commit" }
 
 [[views]]
 id = "commits"
 title = "Commits"
 container = "scm"
-on_expand = "ferrite.git.expandCommit"
+on_expand = "flareite.git.expandCommit"
 
 [[views]]
 id = "stashes"
 title = "Stashes"
 container = "scm"
-on_expand = "ferrite.git.expandStash"
+on_expand = "flareite.git.expandStash"
 
 [[views]]
 id = "file-history"
@@ -84,402 +84,402 @@ icon = "history"
 
 # Commands from the palette.
 [[commands]]
-id = "ferrite.git.refresh"
+id = "flareite.git.refresh"
 title = "Refresh"
 
 [[commands]]
-id = "ferrite.git.init"
+id = "flareite.git.init"
 title = "Initialize Repository"
 
 [[commands]]
-id = "ferrite.git.commit"
+id = "flareite.git.commit"
 title = "Commit"
 
 [[commands]]
-id = "ferrite.git.commitStaged"
+id = "flareite.git.commitStaged"
 title = "Commit Staged"
 
 [[commands]]
-id = "ferrite.git.commitAll"
+id = "flareite.git.commitAll"
 title = "Commit All"
 
 [[commands]]
-id = "ferrite.git.commitAmend"
+id = "flareite.git.commitAmend"
 title = "Commit (Amend)"
 
 [[commands]]
-id = "ferrite.git.undoCommit"
+id = "flareite.git.undoCommit"
 title = "Undo Last Commit"
 
 [[commands]]
-id = "ferrite.git.stageAll"
+id = "flareite.git.stageAll"
 title = "Stage All Changes"
 
 [[commands]]
-id = "ferrite.git.unstageAll"
+id = "flareite.git.unstageAll"
 title = "Unstage All Changes"
 
 [[commands]]
-id = "ferrite.git.discardAll"
+id = "flareite.git.discardAll"
 title = "Discard All Changes"
 
 [[commands]]
-id = "ferrite.git.openFileChanges"
+id = "flareite.git.openFileChanges"
 title = "Open Changes"
 
 [[commands]]
-id = "ferrite.git.checkout"
+id = "flareite.git.checkout"
 title = "Checkout to…"
 
 [[commands]]
-id = "ferrite.git.createBranch"
+id = "flareite.git.createBranch"
 title = "Create Branch…"
 
 [[commands]]
-id = "ferrite.git.createBranchFrom"
+id = "flareite.git.createBranchFrom"
 title = "Create Branch From…"
 
 [[commands]]
-id = "ferrite.git.renameBranch"
+id = "flareite.git.renameBranch"
 title = "Rename Branch…"
 
 [[commands]]
-id = "ferrite.git.deleteBranch"
+id = "flareite.git.deleteBranch"
 title = "Delete Branch…"
 
 [[commands]]
-id = "ferrite.git.mergeBranch"
+id = "flareite.git.mergeBranch"
 title = "Merge Branch…"
 
 [[commands]]
-id = "ferrite.git.publish"
+id = "flareite.git.publish"
 title = "Publish Branch"
 
 [[commands]]
-id = "ferrite.git.fetch"
+id = "flareite.git.fetch"
 title = "Fetch"
 
 [[commands]]
-id = "ferrite.git.fetchPrune"
+id = "flareite.git.fetchPrune"
 title = "Fetch (Prune)"
 
 [[commands]]
-id = "ferrite.git.fetchAll"
+id = "flareite.git.fetchAll"
 title = "Fetch From All Remotes"
 
 [[commands]]
-id = "ferrite.git.pull"
+id = "flareite.git.pull"
 title = "Pull"
 
 [[commands]]
-id = "ferrite.git.pullRebase"
+id = "flareite.git.pullRebase"
 title = "Pull (Rebase)"
 
 [[commands]]
-id = "ferrite.git.push"
+id = "flareite.git.push"
 title = "Push"
 
 [[commands]]
-id = "ferrite.git.sync"
+id = "flareite.git.sync"
 title = "Sync"
 
 [[commands]]
-id = "ferrite.git.addRemote"
+id = "flareite.git.addRemote"
 title = "Add Remote…"
 
 [[commands]]
-id = "ferrite.git.removeRemote"
+id = "flareite.git.removeRemote"
 title = "Remove Remote…"
 
 [[commands]]
-id = "ferrite.git.stash"
+id = "flareite.git.stash"
 title = "Stash"
 
 [[commands]]
-id = "ferrite.git.stashIncludeUntracked"
+id = "flareite.git.stashIncludeUntracked"
 title = "Stash (Include Untracked)"
 
 [[commands]]
-id = "ferrite.git.stashStaged"
+id = "flareite.git.stashStaged"
 title = "Stash Staged"
 
 [[commands]]
-id = "ferrite.git.stashApplyLatest"
+id = "flareite.git.stashApplyLatest"
 title = "Apply Latest Stash"
 
 [[commands]]
-id = "ferrite.git.stashPopLatest"
+id = "flareite.git.stashPopLatest"
 title = "Pop Latest Stash"
 
 [[commands]]
-id = "ferrite.git.stashDropAll"
+id = "flareite.git.stashDropAll"
 title = "Drop All Stashes…"
 
 [[commands]]
-id = "ferrite.git.createTag"
+id = "flareite.git.createTag"
 title = "Create Tag…"
 
 [[commands]]
-id = "ferrite.git.deleteTag"
+id = "flareite.git.deleteTag"
 title = "Delete Tag…"
 
 [[commands]]
-id = "ferrite.git.pushTags"
+id = "flareite.git.pushTags"
 title = "Push Tags"
 
 [[commands]]
-id = "ferrite.git.clone"
+id = "flareite.git.clone"
 title = "Clone…"
 
 [[commands]]
-id = "ferrite.git.stashApply"
+id = "flareite.git.stashApply"
 title = "Apply Stash"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.stashPop"
+id = "flareite.git.stashPop"
 title = "Pop Stash"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.stashDrop"
+id = "flareite.git.stashDrop"
 title = "Drop Stash"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.expandStash"
+id = "flareite.git.expandStash"
 title = "List a Stash's Files"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.createTagAt"
+id = "flareite.git.createTagAt"
 title = "Create Tag…"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.cherryPick"
+id = "flareite.git.cherryPick"
 title = "Cherry-Pick Commit"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.revertCommit"
+id = "flareite.git.revertCommit"
 title = "Revert Commit"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.checkoutCommit"
+id = "flareite.git.checkoutCommit"
 title = "Checkout (Detached)"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.branchAt"
+id = "flareite.git.branchAt"
 title = "Create Branch…"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.addToGitignore"
+id = "flareite.git.addToGitignore"
 title = "Add to .gitignore"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.activeFileChanged"
+id = "flareite.git.activeFileChanged"
 title = "Active File Changed"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.stageSelectedRanges"
+id = "flareite.git.stageSelectedRanges"
 title = "Stage Selected Ranges"
 
 # Commands for the views' items and buttons.
 [[commands]]
-id = "ferrite.git.stage"
+id = "flareite.git.stage"
 title = "Stage Changes"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.unstage"
+id = "flareite.git.unstage"
 title = "Unstage Changes"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.discard"
+id = "flareite.git.discard"
 title = "Discard Changes"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.open"
+id = "flareite.git.open"
 title = "Open File"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.openChange"
+id = "flareite.git.openChange"
 title = "Open Changes"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.openStagedChange"
+id = "flareite.git.openStagedChange"
 title = "Open Changes"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.openCommitChange"
+id = "flareite.git.openCommitChange"
 title = "Open Changes"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.openCommitFile"
+id = "flareite.git.openCommitFile"
 title = "Open File"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.viewAsTree"
+id = "flareite.git.viewAsTree"
 title = "View as Tree"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.viewAsList"
+id = "flareite.git.viewAsList"
 title = "View as List"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.loadMore"
+id = "flareite.git.loadMore"
 title = "Load More Commits"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.commitDetails"
+id = "flareite.git.commitDetails"
 title = "Open Commit Details"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.trust"
+id = "flareite.git.trust"
 title = "Trust Folder"
 hidden = true
 
 # Run by the editor, not the user.
 [[commands]]
-id = "ferrite.git.folderChanged"
+id = "flareite.git.folderChanged"
 title = "Open Folder Changed"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.filesChanged"
+id = "flareite.git.filesChanged"
 title = "Files Changed"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.jobFinished"
+id = "flareite.git.jobFinished"
 title = "Git Finished"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.answered"
+id = "flareite.git.answered"
 title = "Answered"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.provide"
+id = "flareite.git.provide"
 title = "Provide a Version"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.acceptCurrent"
+id = "flareite.git.acceptCurrent"
 title = "Accept Current Change"
 
 [[commands]]
-id = "ferrite.git.acceptIncoming"
+id = "flareite.git.acceptIncoming"
 title = "Accept Incoming Change"
 
 [[commands]]
-id = "ferrite.git.acceptBoth"
+id = "flareite.git.acceptBoth"
 title = "Accept Both Changes"
 
 [[commands]]
-id = "ferrite.git.acceptAllCurrent"
+id = "flareite.git.acceptAllCurrent"
 title = "Accept All Current"
 
 [[commands]]
-id = "ferrite.git.acceptAllIncoming"
+id = "flareite.git.acceptAllIncoming"
 title = "Accept All Incoming"
 
 [[commands]]
-id = "ferrite.git.acceptAllBoth"
+id = "flareite.git.acceptAllBoth"
 title = "Accept All Both"
 
 [[commands]]
-id = "ferrite.git.nextConflict"
+id = "flareite.git.nextConflict"
 title = "Next Conflict"
 
 [[commands]]
-id = "ferrite.git.previousConflict"
+id = "flareite.git.previousConflict"
 title = "Previous Conflict"
 
 [[commands]]
-id = "ferrite.git.compareConflict"
+id = "flareite.git.compareConflict"
 title = "Compare Current and Incoming Changes"
 
 [[commands]]
-id = "ferrite.git.openMergeEditor"
+id = "flareite.git.openMergeEditor"
 title = "Open in Merge Editor"
 
 [[commands]]
-id = "ferrite.git.continueOperation"
+id = "flareite.git.continueOperation"
 title = "Continue"
 
 [[commands]]
-id = "ferrite.git.abortOperation"
+id = "flareite.git.abortOperation"
 title = "Abort"
 
 [[commands]]
-id = "ferrite.git.skipRebase"
+id = "flareite.git.skipRebase"
 title = "Skip Commit (Rebase)"
 
 [[commands]]
-id = "ferrite.git.rebaseBranch"
+id = "flareite.git.rebaseBranch"
 title = "Rebase Branch…"
 
 [[commands]]
-id = "ferrite.git.openConflict"
+id = "flareite.git.openConflict"
 title = "Open a Conflicted File"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.mergeCompleted"
+id = "flareite.git.mergeCompleted"
 title = "Stage a Merged File"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.selectRepository"
+id = "flareite.git.selectRepository"
 title = "Choose a Repository"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.selectionChanged"
+id = "flareite.git.selectionChanged"
 title = "Follow the Cursor's Line"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.blameDetails"
+id = "flareite.git.blameDetails"
 title = "Open the Blamed Commit"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.original"
+id = "flareite.git.original"
 title = "Name a File's Original"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.stageChanges"
+id = "flareite.git.stageChanges"
 title = "Stage Changes"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.autofetch"
+id = "flareite.git.autofetch"
 title = "Fetch in the Background"
 hidden = true
 
 [[commands]]
-id = "ferrite.git.expandCommit"
+id = "flareite.git.expandCommit"
 title = "List a Commit's Files"
 hidden = true
 
@@ -488,7 +488,7 @@ hidden = true
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.continueOperation"
+command = "flareite.git.continueOperation"
 inline = true
 icon = "play"
 when = "operation"
@@ -496,7 +496,7 @@ when = "operation"
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.abortOperation"
+command = "flareite.git.abortOperation"
 inline = true
 icon = "stop"
 when = "operation"
@@ -504,35 +504,35 @@ when = "operation"
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.continueOperation"
+command = "flareite.git.continueOperation"
 group = "0_operation"
 when = "operation"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.abortOperation"
+command = "flareite.git.abortOperation"
 group = "0_operation"
 when = "operation"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.skipRebase"
+command = "flareite.git.skipRebase"
 group = "0_operation"
 when = "rebasing"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.rebaseBranch"
+command = "flareite.git.rebaseBranch"
 group = "5_branch"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.commit"
+command = "flareite.git.commit"
 inline = true
 icon = "check"
 when = "repository"
@@ -540,7 +540,7 @@ when = "repository"
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.refresh"
+command = "flareite.git.refresh"
 inline = true
 icon = "refresh"
 when = "repository"
@@ -548,182 +548,182 @@ when = "repository"
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.commit"
+command = "flareite.git.commit"
 group = "1_commit"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.commitStaged"
+command = "flareite.git.commitStaged"
 group = "1_commit"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.commitAll"
+command = "flareite.git.commitAll"
 group = "1_commit"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.commitAmend"
+command = "flareite.git.commitAmend"
 group = "1_commit"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.undoCommit"
+command = "flareite.git.undoCommit"
 group = "1_commit"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.stageAll"
+command = "flareite.git.stageAll"
 group = "2_changes"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.unstageAll"
+command = "flareite.git.unstageAll"
 group = "2_changes"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.discardAll"
+command = "flareite.git.discardAll"
 group = "2_changes"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.pull"
+command = "flareite.git.pull"
 group = "4_remote"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.pullRebase"
+command = "flareite.git.pullRebase"
 group = "4_remote"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.push"
+command = "flareite.git.push"
 group = "4_remote"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.sync"
+command = "flareite.git.sync"
 group = "4_remote"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.fetch"
+command = "flareite.git.fetch"
 group = "4_remote"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.fetchPrune"
+command = "flareite.git.fetchPrune"
 group = "4_remote"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.fetchAll"
+command = "flareite.git.fetchAll"
 group = "4_remote"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.checkout"
+command = "flareite.git.checkout"
 group = "5_branch"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.createBranch"
+command = "flareite.git.createBranch"
 group = "5_branch"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.createBranchFrom"
+command = "flareite.git.createBranchFrom"
 group = "5_branch"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.renameBranch"
+command = "flareite.git.renameBranch"
 group = "5_branch"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.deleteBranch"
+command = "flareite.git.deleteBranch"
 group = "5_branch"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.mergeBranch"
+command = "flareite.git.mergeBranch"
 group = "5_branch"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.publish"
+command = "flareite.git.publish"
 group = "5_branch"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.addRemote"
+command = "flareite.git.addRemote"
 group = "6_remote"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.removeRemote"
+command = "flareite.git.removeRemote"
 group = "6_remote"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.viewAsTree"
+command = "flareite.git.viewAsTree"
 group = "3_view"
 when = "!tree"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.viewAsList"
+command = "flareite.git.viewAsList"
 group = "3_view"
 when = "tree"
 
@@ -732,7 +732,7 @@ when = "tree"
 location = "view/item"
 view = "changes"
 contexts = ["staged-group"]
-command = "ferrite.git.unstageAll"
+command = "flareite.git.unstageAll"
 inline = true
 icon = "remove"
 
@@ -740,7 +740,7 @@ icon = "remove"
 location = "view/item"
 view = "changes"
 contexts = ["changes-group"]
-command = "ferrite.git.discardAll"
+command = "flareite.git.discardAll"
 inline = true
 icon = "undo"
 
@@ -748,7 +748,7 @@ icon = "undo"
 location = "view/item"
 view = "changes"
 contexts = ["changes-group"]
-command = "ferrite.git.stageAll"
+command = "flareite.git.stageAll"
 inline = true
 icon = "add"
 
@@ -757,7 +757,7 @@ icon = "add"
 location = "view/item"
 view = "changes"
 contexts = ["merge"]
-command = "ferrite.git.openMergeEditor"
+command = "flareite.git.openMergeEditor"
 inline = true
 icon = "merge"
 
@@ -765,7 +765,7 @@ icon = "merge"
 location = "view/item"
 view = "changes"
 contexts = ["merge"]
-command = "ferrite.git.openMergeEditor"
+command = "flareite.git.openMergeEditor"
 group = "1_open"
 
 # The Changes view's files.
@@ -773,7 +773,7 @@ group = "1_open"
 location = "view/item"
 view = "changes"
 contexts = ["staged", "changed", "untracked", "merge"]
-command = "ferrite.git.open"
+command = "flareite.git.open"
 inline = true
 icon = "file"
 
@@ -781,7 +781,7 @@ icon = "file"
 location = "view/item"
 view = "changes"
 contexts = ["changed", "untracked"]
-command = "ferrite.git.discard"
+command = "flareite.git.discard"
 inline = true
 icon = "undo"
 
@@ -789,7 +789,7 @@ icon = "undo"
 location = "view/item"
 view = "changes"
 contexts = ["changed", "untracked", "merge"]
-command = "ferrite.git.stage"
+command = "flareite.git.stage"
 inline = true
 icon = "add"
 
@@ -797,7 +797,7 @@ icon = "add"
 location = "view/item"
 view = "changes"
 contexts = ["staged"]
-command = "ferrite.git.unstage"
+command = "flareite.git.unstage"
 inline = true
 icon = "remove"
 
@@ -805,49 +805,49 @@ icon = "remove"
 location = "view/item"
 view = "changes"
 contexts = ["changed"]
-command = "ferrite.git.openChange"
+command = "flareite.git.openChange"
 group = "1_open"
 
 [[menus]]
 location = "view/item"
 view = "changes"
 contexts = ["staged"]
-command = "ferrite.git.openStagedChange"
+command = "flareite.git.openStagedChange"
 group = "1_open"
 
 [[menus]]
 location = "view/item"
 view = "changes"
 contexts = ["staged", "changed", "untracked", "merge"]
-command = "ferrite.git.open"
+command = "flareite.git.open"
 group = "1_open"
 
 [[menus]]
 location = "view/item"
 view = "changes"
 contexts = ["changed", "untracked", "merge"]
-command = "ferrite.git.stage"
+command = "flareite.git.stage"
 group = "2_modify"
 
 [[menus]]
 location = "view/item"
 view = "changes"
 contexts = ["staged"]
-command = "ferrite.git.unstage"
+command = "flareite.git.unstage"
 group = "2_modify"
 
 [[menus]]
 location = "view/item"
 view = "changes"
 contexts = ["changed", "untracked"]
-command = "ferrite.git.discard"
+command = "flareite.git.discard"
 group = "2_modify"
 
 # The Commits view.
 [[menus]]
 location = "view/title"
 view = "commits"
-command = "ferrite.git.refresh"
+command = "flareite.git.refresh"
 inline = true
 icon = "refresh"
 when = "repository"
@@ -856,13 +856,13 @@ when = "repository"
 location = "view/item"
 view = "commits"
 contexts = ["commit"]
-command = "ferrite.git.commitDetails"
+command = "flareite.git.commitDetails"
 
 [[menus]]
 location = "view/item"
 view = "commits"
 contexts = ["commit-file"]
-command = "ferrite.git.openCommitFile"
+command = "flareite.git.openCommitFile"
 inline = true
 icon = "file"
 
@@ -870,68 +870,68 @@ icon = "file"
 location = "view/item"
 view = "commits"
 contexts = ["commit-file"]
-command = "ferrite.git.openCommitChange"
+command = "flareite.git.openCommitChange"
 group = "1_open"
 
 [[menus]]
 location = "view/item"
 view = "commits"
 contexts = ["commit-file"]
-command = "ferrite.git.openCommitFile"
+command = "flareite.git.openCommitFile"
 group = "1_open"
 
 # The editor.
 [[menus]]
 location = "editor/context"
-command = "ferrite.git.stageSelectedRanges"
+command = "flareite.git.stageSelectedRanges"
 group = "9_git"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.stash"
+command = "flareite.git.stash"
 group = "7_stash"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.stashIncludeUntracked"
+command = "flareite.git.stashIncludeUntracked"
 group = "7_stash"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.stashStaged"
+command = "flareite.git.stashStaged"
 group = "7_stash"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.createTag"
+command = "flareite.git.createTag"
 group = "8_tags"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.deleteTag"
+command = "flareite.git.deleteTag"
 group = "8_tags"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "changes"
-command = "ferrite.git.pushTags"
+command = "flareite.git.pushTags"
 group = "8_tags"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "stashes"
-command = "ferrite.git.stash"
+command = "flareite.git.stash"
 inline = true
 icon = "add"
 when = "repository"
@@ -939,35 +939,35 @@ when = "repository"
 [[menus]]
 location = "view/title"
 view = "stashes"
-command = "ferrite.git.stashIncludeUntracked"
+command = "flareite.git.stashIncludeUntracked"
 group = "1_stash"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "stashes"
-command = "ferrite.git.stashStaged"
+command = "flareite.git.stashStaged"
 group = "1_stash"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "stashes"
-command = "ferrite.git.stashApplyLatest"
+command = "flareite.git.stashApplyLatest"
 group = "1_stash"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "stashes"
-command = "ferrite.git.stashPopLatest"
+command = "flareite.git.stashPopLatest"
 group = "1_stash"
 when = "repository"
 
 [[menus]]
 location = "view/title"
 view = "stashes"
-command = "ferrite.git.stashDropAll"
+command = "flareite.git.stashDropAll"
 group = "1_stash"
 when = "repository"
 
@@ -975,7 +975,7 @@ when = "repository"
 location = "view/item"
 view = "stashes"
 contexts = ["stash"]
-command = "ferrite.git.stashApply"
+command = "flareite.git.stashApply"
 inline = true
 icon = "check"
 
@@ -983,7 +983,7 @@ icon = "check"
 location = "view/item"
 view = "stashes"
 contexts = ["stash"]
-command = "ferrite.git.stashPop"
+command = "flareite.git.stashPop"
 inline = true
 icon = "download"
 
@@ -991,7 +991,7 @@ icon = "download"
 location = "view/item"
 view = "stashes"
 contexts = ["stash"]
-command = "ferrite.git.stashDrop"
+command = "flareite.git.stashDrop"
 inline = true
 icon = "close"
 
@@ -999,28 +999,28 @@ icon = "close"
 location = "view/item"
 view = "stashes"
 contexts = ["stash"]
-command = "ferrite.git.stashApply"
+command = "flareite.git.stashApply"
 group = "1_stash"
 
 [[menus]]
 location = "view/item"
 view = "stashes"
 contexts = ["stash"]
-command = "ferrite.git.stashPop"
+command = "flareite.git.stashPop"
 group = "1_stash"
 
 [[menus]]
 location = "view/item"
 view = "stashes"
 contexts = ["stash"]
-command = "ferrite.git.stashDrop"
+command = "flareite.git.stashDrop"
 group = "1_stash"
 
 [[menus]]
 location = "view/item"
 view = "stashes"
 contexts = ["commit-file"]
-command = "ferrite.git.openCommitFile"
+command = "flareite.git.openCommitFile"
 inline = true
 icon = "file"
 
@@ -1028,48 +1028,48 @@ icon = "file"
 location = "view/item"
 view = "commits"
 contexts = ["commit"]
-command = "ferrite.git.checkoutCommit"
+command = "flareite.git.checkoutCommit"
 group = "2_refs"
 
 [[menus]]
 location = "view/item"
 view = "commits"
 contexts = ["commit"]
-command = "ferrite.git.branchAt"
+command = "flareite.git.branchAt"
 group = "2_refs"
 
 [[menus]]
 location = "view/item"
 view = "commits"
 contexts = ["commit"]
-command = "ferrite.git.createTagAt"
+command = "flareite.git.createTagAt"
 group = "2_refs"
 
 [[menus]]
 location = "view/item"
 view = "commits"
 contexts = ["commit"]
-command = "ferrite.git.cherryPick"
+command = "flareite.git.cherryPick"
 group = "3_apply"
 
 [[menus]]
 location = "view/item"
 view = "commits"
 contexts = ["commit"]
-command = "ferrite.git.revertCommit"
+command = "flareite.git.revertCommit"
 group = "3_apply"
 
 [[menus]]
 location = "explorer/context"
 targets = ["files", "folders"]
-command = "ferrite.git.addToGitignore"
+command = "flareite.git.addToGitignore"
 group = "7_git"
 
 # The explorer's files.
 [[menus]]
 location = "explorer/context"
 targets = ["files"]
-command = "ferrite.git.openFileChanges"
+command = "flareite.git.openFileChanges"
 group = "7_git"
 
 [[status_items]]
@@ -1150,7 +1150,7 @@ default = true
 description = "Ask before syncing (pulling, then pushing) with the branch's upstream."
 
 # The explorer's colors. Themes and [workbench.colors] can change them, as
-# "ferrite.git.modified" and so on.
+# "flareite.git.modified" and so on.
 [colors.modified]
 description = "Files with changes"
 dark = "#e2c08d"

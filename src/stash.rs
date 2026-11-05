@@ -2,9 +2,9 @@
 //! can be applied, popped, or dropped, and opened to list its files, which
 //! open to compare them with the commit the stash was made on.
 
-use ferrite_extension_api::prompts::{self, AnswerValue, InputOptions};
-use ferrite_extension_api::types::LogLevel;
-use ferrite_extension_api::views::{self, Expansion, ItemIcon, TreeItem, Welcome, WelcomeButton};
+use flareite_extension_api::prompts::{self, AnswerValue, InputOptions};
+use flareite_extension_api::types::LogLevel;
+use flareite_extension_api::views::{self, Expansion, ItemIcon, TreeItem, Welcome, WelcomeButton};
 
 use crate::{
   ANSWERED, Pending, Then, args, ask_confirm, commit_changes, error, info, log, operate, operation,
@@ -88,7 +88,7 @@ pub fn load() {
     text: "No stashes. Stashing puts your changes aside, to bring back later.".into(),
     buttons: vec![WelcomeButton {
       label: "Stash Changes".into(),
-      command: "ferrite.git.stash".into(),
+      command: "flareite.git.stash".into(),
       argument: None,
     }],
   });
