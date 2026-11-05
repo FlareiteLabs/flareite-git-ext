@@ -1,13 +1,20 @@
 [package]
 name = "git"
-description = "Git for Ferrite: file status in the explorer, and the current branch."
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-publish.workspace = true
+description = "Git for Ferrite: source control in the editor."
+version = "0.5.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-ferrite-extension-api = { workspace = true }
+# The editor's repository, checked out beside this one.
+ferrite-extension-api = { path = "../editor/crates/ferrite-extension-api" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
