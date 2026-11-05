@@ -41,8 +41,18 @@ pub fn stage(revision: &str) -> Option<char> {
   }
 }
 
-/// The address of the file at `path` in `revision`.
+/// The address of the file at `path` in `revision`: `path` is relative to
+/// the active repository; addresses are relative to the base folder (see
+/// `repos.rs`).
 pub fn address(revision: &str, path: &str) -> String {
+  base_address(
+    revision,
+    &format!("{}{path}", crate::repos::active_prefix()),
+  )
+}
+
+/// The address of the file at `path`, relative to the base folder.
+pub fn base_address(revision: &str, path: &str) -> String {
   format!("git:{revision}:{path}")
 }
 

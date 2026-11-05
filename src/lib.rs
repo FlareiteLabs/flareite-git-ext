@@ -13,6 +13,7 @@
 //! meanwhile run one more. Commands that change the repository run one
 //! after another, each followed by a status.
 
+mod blame;
 mod conflicts;
 mod diff;
 mod graph;
@@ -20,6 +21,7 @@ mod history;
 mod panel;
 mod progress;
 mod remote;
+mod repos;
 mod stash;
 mod status;
 mod timeline;
@@ -28,7 +30,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use ferrite_extension_api::documents;
-use ferrite_extension_api::explorer::{self, FileMark};
+use ferrite_extension_api::explorer;
 use ferrite_extension_api::processes::{self, ProcessError, ProcessOptions, ProcessOutput};
 use ferrite_extension_api::prompts::{self, AnswerValue, ConfirmOptions, InputOptions};
 use ferrite_extension_api::quick_diff;
@@ -50,11 +52,9 @@ const CHANGES: &str = "changes";
 const COMMITS: &str = "commits";
 /// Commits loaded at a time.
 const PAGE: usize = 50;
-/// Most files marked; a repository with more changes than this shows the
-/// first ones.
-const MAX_MARKS: usize = 50_000;
 
-/// The repository the open folder is in.
+/// A repository: the active one, or one of those found.
+#[derive(Clone)]
 struct Repository {
   /// Its top folder, in the platform's form.
   root: String,
@@ -64,16 +64,33 @@ struct Repository {
 
 /// What a running program is for.
 enum Job {
-  Status,
-  /// `git log`, from the `skip`th commit.
+  /// A repository's `git status`.
+  Status {
+    root: String,
+  },
+  /// `git log` of a repository, from the `skip`th commit.
   Log {
     skip: usize,
+    root: String,
+  },
+  /// Listing a repository's files, to see how large it is.
+  Index {
+    root: String,
   },
   Operation(Operation),
   /// A fetch in the background, whose failures are only logged.
   Fetch,
-  /// Asking which operation is in progress (see `progress.rs`).
-  Progress,
+  /// Asking which operation is in progress in a repository (see
+  /// `progress.rs`).
+  Progress {
+    root: String,
+  },
+  /// A document's blame, at a version.
+  Blame {
+    document: DocumentId,
+    version: u64,
+    root: String,
+  },
 }
 
 /// A command that changes the repository.
@@ -144,10 +161,6 @@ struct State {
   watches: Vec<u64>,
   /// Programs running, by process id.
   jobs: HashMap<u64, Job>,
-  /// A `git status` is running.
-  status_running: bool,
-  /// Files changed while it ran: run it again.
-  stale: bool,
   status: Option<Status>,
   /// The commit history was loaded for (`None`: no commits yet).
   history_head: Option<Option<String>>,
@@ -167,6 +180,12 @@ struct State {
   conflicted_documents: HashSet<DocumentId>,
   /// What's in progress: a merge, rebase, cherry-pick, or revert.
   progress: Option<progress::Progress>,
+  /// Every repository found (see `repos.rs`).
+  repos: Vec<repos::Repo>,
+  /// The folder `git:` addresses are relative to.
+  base: Option<String>,
+  /// Blame of documents, and what's shown of it.
+  blame: blame::BlameState,
   /// The Changes view lists only some of the changes.
   too_many_changes: bool,
 }
@@ -337,11 +356,14 @@ fn clear_output() {
   let _ = explorer::set_file_marks(&[]);
   let _ = workbench::set_status_item("branch", None);
   let _ = workbench::set_status_item("sync", None);
+  let _ = workbench::set_status_item("blame", None);
   with_state(|state| state.progress = None);
   // No repository: nothing to fetch.
   if let Some(timer) = with_state(|state| state.autofetch_timer.take()) {
     ferrite_extension_api::timers::clear_timer(timer);
   }
+  let _ = views::set_items(repos::REPOSITORIES, &[]);
+  let _ = views::set_visible(repos::REPOSITORIES, false);
   for view in [CHANGES, COMMITS] {
     let _ = views::set_items(view, &[]);
     let _ = views::set_welcome(view, None);
@@ -357,9 +379,9 @@ fn start() {
   let (watches, jobs) = with_state(|state| {
     state.folder = None;
     state.repository = None;
-    state.stale = false;
     state.status = None;
-    state.status_running = false;
+    state.repos.clear();
+    state.base = None;
     state.history_head = None;
     state.commits.clear();
     state.operations.clear();
@@ -418,45 +440,62 @@ fn start() {
       return;
     }
   };
-  if output.exit_code != Some(0) {
-    log(
-      LogLevel::Debug,
-      &format!(
-        "not a Git repository: {}",
-        String::from_utf8_lossy(&output.stderr).trim()
-      ),
-    );
-    welcome(
-      "The open folder isn't in a Git repository.",
-      &[
-        ("Initialize Repository", "ferrite.git.init"),
-        ("Clone Repository", "ferrite.git.clone"),
-      ],
-    );
-    return;
-  }
   let text = String::from_utf8_lossy(&output.stdout);
   let mut lines = text.lines();
-  let (Some(root), Some(git_dir)) = (lines.next(), lines.next()) else {
-    log(LogLevel::Warn, "git rev-parse printed nothing");
-    return;
+  let top = match (output.exit_code, lines.next(), lines.next()) {
+    (Some(0), Some(root), Some(git_dir)) => Some(Repository {
+      root: platform_path(root.trim(), &path),
+      git_dir: platform_path(git_dir.trim(), &path),
+    }),
+    _ => {
+      log(
+        LogLevel::Debug,
+        &format!(
+          "not a Git repository: {}",
+          String::from_utf8_lossy(&output.stderr).trim()
+        ),
+      );
+      None
+    }
   };
-  let repository = Repository {
-    root: platform_path(root.trim(), &path),
-    git_dir: platform_path(git_dir.trim(), &path),
+  let active = match top {
+    Some(top) => {
+      // Addresses are relative to the top repository; its subfolders are
+      // looked in once its status lists them.
+      with_state(|state| {
+        state.base = Some(top.root.clone());
+        state.repository = Some(top.clone());
+      });
+      repos::add(top.root.clone(), top.git_dir.clone());
+      top
+    }
+    None => {
+      with_state(|state| state.base = Some(path.clone()));
+      repos::discover_subfolders(&path);
+      let Some(first) = repos::git_dirs().into_iter().next() else {
+        with_state(|state| state.base = None);
+        welcome(
+          "The open folder isn't in a Git repository.",
+          &[
+            ("Initialize Repository", "ferrite.git.init"),
+            ("Clone Repository", "ferrite.git.clone"),
+          ],
+        );
+        return;
+      };
+      let first = Repository {
+        root: first.0,
+        git_dir: first.1,
+      };
+      with_state(|state| state.repository = Some(first.clone()));
+      first
+    }
   };
-  if !is_within(&repository.git_dir, &path) {
-    watch(&repository.git_dir);
-  }
-  log(
-    LogLevel::Info,
-    &format!("repository at {} ({})", repository.root, repository.git_dir),
-  );
-  with_state(|state| state.repository = Some(repository));
+  let _ = active;
   let flags = vec!["repository".to_owned()];
   let _ = views::set_flags(COMMITS, &flags);
   set_changes_flags();
-  refresh();
+  repos::update_view();
   remote::schedule_autofetch();
   stash::load();
   timeline::load();
@@ -533,32 +572,10 @@ fn spawn(job: Job, args: &[String], cwd: &str, stdin: Option<Vec<u8>>) -> bool {
   }
 }
 
-/// Runs `git status` in the background, or again once the running one ends.
+/// Runs the active repository's `git status` in the background.
 fn refresh() {
-  let Some((root, _)) = repository() else {
-    return;
-  };
-  if with_state(|state| std::mem::replace(&mut state.status_running, true)) {
-    with_state(|state| state.stale = true);
-    return;
-  }
-  let started = spawn(
-    Job::Status,
-    &args(&[
-      "--no-optional-locks",
-      "-c",
-      "core.quotepath=false",
-      "status",
-      "--porcelain=v2",
-      "-z",
-      "--branch",
-      "--untracked-files=all",
-    ]),
-    &root,
-    None,
-  );
-  if !started {
-    with_state(|state| state.status_running = false);
+  if let Some((root, _)) = repository() {
+    repos::refresh(&root);
   }
 }
 
@@ -572,80 +589,25 @@ fn job_finished() {
   };
   log_outcome(&finished.outcome);
   match job {
-    Job::Status => status_finished(finished.outcome),
-    Job::Log { skip } => log_finished(skip, finished.outcome),
+    Job::Status { root } => repos::status_finished(root, finished.outcome),
+    Job::Log { skip, root } => log_finished(skip, &root, finished.outcome),
+    Job::Index { root } => repos::index_finished(root, finished.outcome),
     Job::Operation(operation) => operation_finished(operation, finished.outcome),
     Job::Fetch => refresh(),
-    Job::Progress => progress::finished(finished.outcome),
-  }
-}
-
-fn status_finished(outcome: Result<ProcessOutput, ProcessError>) {
-  with_state(|state| state.status_running = false);
-  match outcome {
-    Ok(output) if output.exit_code == Some(0) => {
-      if output.truncated {
-        log(
-          LogLevel::Warn,
-          "git status printed too much; some changes aren't shown",
-        );
-      }
-      show(status::parse(&output.stdout));
-    }
-    Ok(output) => {
-      let message = failure(&output);
-      log(LogLevel::Warn, &format!("git status failed: {message}"));
-      if message.contains("not a git repository") {
-        // Its .git folder went away.
-        return start();
-      }
-    }
-    Err(ProcessError::Killed) => {}
-    Err(problem) => log(LogLevel::Warn, &format!("git status failed: {problem:?}")),
-  }
-  if with_state(|state| std::mem::take(&mut state.stale)) {
-    refresh();
+    Job::Progress { root } => progress::finished(&root, finished.outcome),
+    Job::Blame {
+      document,
+      version,
+      root,
+    } => blame::finished(document, version, &root, finished.outcome),
   }
 }
 
 /// Shows a status: marks in the explorer, the branch, and the Changes view;
 /// and loads the commits again if HEAD moved.
 fn show(status: Status) {
-  let Some((root, folder)) = repository() else {
+  if repository().is_none() {
     return;
-  };
-  let separator = if backslashes(&folder) { "\\" } else { "/" };
-  let marks: Vec<FileMark> = if marks_enabled() {
-    status
-      .on_disk()
-      .take(MAX_MARKS)
-      .map(|entry| {
-        let relative = entry.path.trim_end_matches('/');
-        FileMark {
-          path: format!("{root}{separator}{}", platform_path(relative, &folder)),
-          badge: Some(entry.kind.badge().into()),
-          color: Some(entry.kind.color().into()),
-          tooltip: Some(entry.tooltip()),
-          faded: false,
-          // Everything in an untracked folder is untracked.
-          inherit: entry.path.ends_with('/'),
-          propagate: true,
-          priority: entry.kind.priority(),
-        }
-      })
-      .collect()
-  } else {
-    Vec::new()
-  };
-  let on_disk = status.on_disk().count();
-  if on_disk > MAX_MARKS {
-    log(
-      LogLevel::Warn,
-      &format!("{on_disk} changed files; the explorer marks the first {MAX_MARKS}"),
-    );
-  }
-  if let Err(problem) = explorer::set_file_marks(&marks) {
-    log(LogLevel::Error, &format!("can't mark files: {problem:?}"));
   }
   let (items, count) = panel::changes(&status, tree_view());
   if let Err(problem) = views::set_items(CHANGES, &items) {
@@ -713,10 +675,22 @@ fn load_commits(skip: usize) {
     log_args.push("@{upstream}".into());
   }
   log_args.push("--".into());
-  spawn(Job::Log { skip }, &log_args, &root, None);
+  spawn(
+    Job::Log {
+      skip,
+      root: root.clone(),
+    },
+    &log_args,
+    &root,
+    None,
+  );
 }
 
-fn log_finished(skip: usize, outcome: Result<ProcessOutput, ProcessError>) {
+fn log_finished(skip: usize, root: &str, outcome: Result<ProcessOutput, ProcessError>) {
+  // Another repository became the active one meanwhile.
+  if repository().is_none_or(|(active, _)| active != root) {
+    return;
+  }
   let output = match outcome {
     Ok(output) if output.exit_code == Some(0) => output,
     Ok(output) => {
@@ -756,8 +730,12 @@ fn log_finished(skip: usize, outcome: Result<ProcessOutput, ProcessError>) {
   }
 }
 
-/// Queues an operation; it runs once those before it end.
-fn operate(operation: Operation) {
+/// Queues an operation; it runs once those before it end, in the
+/// repository active now.
+fn operate(mut operation: Operation) {
+  if operation.cwd.is_none() {
+    operation.cwd = repository().map(|(root, _)| root);
+  }
   with_state(|state| state.operations.push_back(operation));
   next_operation();
 }
@@ -944,19 +922,17 @@ fn stage_now(paths: Vec<String>) {
 /// Whether the file at `path` (absolute) has merge conflicts, as Git's
 /// status says.
 fn is_conflicted(path: &str) -> bool {
-  let Some((root, _)) = repository() else {
+  let Some(repo) = repos::repo_of(path) else {
     return false;
   };
-  let Some(relative) = relative_path(&root, path) else {
+  let Some(relative) = relative_path(&repo.root, path) else {
     return false;
   };
-  with_state(|state| {
-    state.status.as_ref().is_some_and(|status| {
-      status
-        .entries
-        .iter()
-        .any(|entry| entry.kind == Kind::Conflict && entry.path == relative)
-    })
+  repos::status_of(&repo.root).is_some_and(|status| {
+    status
+      .entries
+      .iter()
+      .any(|entry| entry.kind == Kind::Conflict && entry.path == relative)
   })
 }
 
@@ -1247,15 +1223,17 @@ fn entry_diff(
   path: &str,
   sides: impl Fn(&status::Entry) -> Option<diff::Sides>,
 ) -> Option<diff::Sides> {
-  with_state(|state| {
-    let entry = state
+  // Taken out first: making addresses reads the state too.
+  let entry = with_state(|state| {
+    state
       .status
       .as_ref()?
       .entries
       .iter()
-      .find(|entry| entry.path.trim_end_matches('/') == path)?;
-    sides(entry)
-  })
+      .find(|entry| entry.path.trim_end_matches('/') == path)
+      .cloned()
+  })?;
+  sides(&entry)
 }
 
 /// Shows changed files' changes not staged: the index against the file.
@@ -1337,13 +1315,17 @@ fn open_commit_files(files: Vec<String>) {
 /// "Open Changes" for a file (the explorer's, as an absolute path) or the
 /// active document: its changes not staged, else its staged ones.
 fn open_file_changes(context: &CommandContext) {
-  let Some((root, _)) = repository() else {
-    return info("The open folder isn't in a Git repository.");
-  };
   let path = workbench::command_argument().or_else(|| {
     let document = host::document(context.document?).ok()?;
     document.path
   });
+  // The file's repository becomes the active one.
+  if let Some(path) = &path {
+    repos::follow(path);
+  }
+  let Some((root, _)) = repository() else {
+    return info("The open folder isn't in a Git repository.");
+  };
   let Some(path) = path else {
     return info("Open a file to see its changes.");
   };
@@ -1366,11 +1348,12 @@ fn provide() {
   let Some(uri) = documents::requested() else {
     return;
   };
-  let text = diff::parse(&uri).and_then(|(revision, path)| {
+  let text = diff::parse(&uri).and_then(|(revision, address_path)| {
     if revision == diff::EMPTY {
       return Some(String::new());
     }
-    let (root, _) = repository()?;
+    let (root, path) = repos::resolve(address_path)?;
+    let path = path.as_str();
     if let Some(choice) = diff::conflict_side(revision) {
       return Some(conflicts::resolve_all(
         &current_text(&absolute(&root, path)),
@@ -1417,13 +1400,16 @@ fn conflict_file(context: &CommandContext) -> Option<String> {
   let (root, _) = repository()?;
   let argument = workbench::command_argument();
   let from_document = || host::document(context.document?).ok()?.path;
-  match argument {
+  let path = match argument {
     // A code lens's argument is its line.
     Some(line) if line.parse::<usize>().is_ok() => from_document(),
-    Some(path) if is_within(&path, &root) => Some(path),
+    Some(path) if std::path::Path::new(&path).is_absolute() => Some(path),
     Some(relative) => Some(absolute(&root, &relative)),
     None => from_document(),
-  }
+  }?;
+  // Its repository becomes the active one.
+  repos::follow(&path);
+  Some(path)
 }
 
 /// Compares a conflicted file's sides: every conflict as the current side
@@ -1540,14 +1526,20 @@ fn open_conflicts(paths: Vec<String>) {
 
 /// The merge editor's result was saved: it's resolved, so it's staged.
 fn merge_completed() {
-  let Some((root, _)) = repository() else {
-    return;
-  };
   let Some(path) = workbench::command_argument() else {
     return;
   };
-  if let Some(relative) = relative_path(&root, &path) {
-    stage_now(vec![relative]);
+  let Some(repo) = repos::repo_of(&path) else {
+    return;
+  };
+  if let Some(relative) = relative_path(&repo.root, &path) {
+    let mut staging = operation(
+      "Staging",
+      with_paths(&["add", "-A"], &[relative]),
+      Then::Nothing,
+    );
+    staging.cwd = Some(repo.root);
+    operate(staging);
   }
 }
 
@@ -1582,7 +1574,8 @@ fn original() {
   let Some(path) = quick_diff::requested_file() else {
     return;
   };
-  let uri = repository().and_then(|(root, _)| {
+  let uri = repos::repo_of(&path).and_then(|repo| {
+    let root = repo.root;
     let relative = relative_path(&root, &path).filter(|relative| !relative.is_empty())?;
     let tracked = run_git(
       &with_paths(
@@ -1592,7 +1585,7 @@ fn original() {
       &options(&root),
     );
     matches!(tracked, Ok(output) if output.exit_code == Some(0))
-      .then(|| diff::address("", &relative))
+      .then(|| repos::address_in(&root, "", &relative))
   });
   if let Err(problem) = quick_diff::set_original(&path, uri.as_deref()) {
     log(
@@ -1608,12 +1601,13 @@ fn stage_changes() {
   let Some(applied) = quick_diff::to_apply() else {
     return;
   };
-  let Some((root, _)) = repository() else {
-    return;
-  };
-  let Some(("", path)) = diff::parse(&applied.uri) else {
+  let Some(("", address_path)) = diff::parse(&applied.uri) else {
     return error("Only changes to the index can be staged.");
   };
+  let Some((root, path)) = repos::resolve(address_path) else {
+    return;
+  };
+  let path = path.as_str();
   let run = |command: &[&str], stdin: Option<Vec<u8>>| -> Result<String, String> {
     let mut options = options(&root);
     options.stdin = stdin;
@@ -1650,7 +1644,7 @@ fn stage_changes() {
   match staged {
     Ok(_) => {
       versions_changed();
-      refresh();
+      repos::refresh(&root);
     }
     Err(message) => error(&format!("Staging failed: {message}")),
   }
@@ -1659,8 +1653,12 @@ fn stage_changes() {
 /// Adds files or folders (absolute paths, from the explorer) to the
 /// repository's `.gitignore`.
 fn add_to_gitignore(paths: Vec<String>) {
-  let Some((root, _)) = repository() else {
-    return;
+  let Some(root) = paths
+    .first()
+    .and_then(|path| repos::repo_of(path))
+    .map(|repo| repo.root)
+  else {
+    return info("Only files in a repository can be ignored.");
   };
   let lines: Vec<String> = paths
     .iter()
@@ -1948,41 +1946,43 @@ fn files_changed() {
   let Some(changes) = workspace::changes() else {
     return;
   };
-  let git_dir = with_state(|state| state.repository.as_ref().map(|repo| repo.git_dir.clone()));
-  match git_dir {
-    Some(git_dir) => {
-      if changes.overflow || changes.paths.iter().any(|path| matters(path, &git_dir)) {
-        refresh();
+  // A repository appeared (`git init`, a clone): look again.
+  if changes.paths.iter().any(|path| repos::appeared(path)) || (changes.overflow && !repos::any()) {
+    return start();
+  }
+  let active = repository().map(|(root, _)| root);
+  let mut versions = changes.overflow;
+  for (root, git_dir) in repos::git_dirs() {
+    let inside = |path: &String| {
+      if is_within(path, &git_dir) {
+        matters(path, &git_dir)
+      } else {
+        is_within(path, &root)
       }
-      // The index or HEAD may have moved: diff tabs showing them update.
-      let versions = changes.overflow
-        || changes
-          .paths
-          .iter()
-          .any(|path| is_within(path, &git_dir) && matters(path, &git_dir));
-      if versions {
-        versions_changed();
+    };
+    if changes.overflow || changes.paths.iter().any(inside) {
+      repos::refresh(&root);
+    }
+    // The index or HEAD may have moved: diff tabs showing them update.
+    if changes
+      .paths
+      .iter()
+      .any(|path| is_within(path, &git_dir) && matters(path, &git_dir))
+    {
+      versions = true;
+      if active.as_deref() == Some(root.as_str()) {
         timeline::load();
-      }
-      // A stash made or dropped outside Ferrite.
-      if changes.paths.iter().any(|path| {
-        is_within(path, &git_dir) && path.trim_end_matches(['/', '\\']).ends_with("stash")
-      }) {
-        stash::load();
-      }
-    }
-    // Not a repository yet: did one appear?
-    None => {
-      let appeared = changes.paths.iter().any(|path| {
-        path
-          .rsplit(['/', '\\'])
-          .next()
-          .is_some_and(|name| name == ".git")
-      });
-      if appeared || changes.overflow {
-        start();
+        // A stash made or dropped outside Ferrite.
+        if changes.paths.iter().any(|path| {
+          is_within(path, &git_dir) && path.trim_end_matches(['/', '\\']).ends_with("stash")
+        }) {
+          stash::load();
+        }
       }
     }
+  }
+  if versions {
+    versions_changed();
   }
 }
 
@@ -2045,7 +2045,23 @@ impl Guest for Git {
       "addRemote" => remote::add_remote(),
       "removeRemote" => remote::remove_remote(),
       "autofetch" => remote::autofetch(),
-      "activeFileChanged" => timeline::load(),
+      "activeFileChanged" => {
+        if let Some(path) = workbench::active_file() {
+          repos::follow(&path);
+        }
+        timeline::load();
+      }
+      "selectionChanged" => blame::selection_changed(&context),
+      "blameDetails" => {
+        if let Some(hash) = with_state(|state| state.blame.hash.clone()) {
+          commit_details(&hash);
+        }
+      }
+      "selectRepository" => {
+        if let Some(root) = workbench::command_argument() {
+          repos::select(&root);
+        }
+      }
       "expandStash" => stash::expand(),
       "stash" => stash::stash(Vec::new()),
       "stashIncludeUntracked" => stash::stash(vec!["--include-untracked"]),
@@ -2138,10 +2154,12 @@ impl Guest for Git {
 
   fn document_changed(change: DocumentChange) {
     conflicts::changed(&change);
+    blame::changed(change.document);
   }
 
   fn document_closed(document: DocumentId) {
     conflicts::closed(document);
+    blame::closed(document);
   }
 }
 

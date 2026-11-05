@@ -110,14 +110,18 @@ pub fn check() {
   };
   let stdin: String = HEADS.iter().map(|(head, _)| format!("{head}\n")).collect();
   spawn(
-    Job::Progress,
+    Job::Progress { root: root.clone() },
     &args(&["--no-optional-locks", "cat-file", "--batch-check"]),
     &root,
     Some(stdin.into_bytes()),
   );
 }
 
-pub fn finished(outcome: Result<ProcessOutput, ProcessError>) {
+pub fn finished(root: &str, outcome: Result<ProcessOutput, ProcessError>) {
+  // Another repository became the active one meanwhile.
+  if repository().is_none_or(|(active, _)| active != root) {
+    return;
+  }
   let found = match outcome {
     Ok(output) if output.exit_code == Some(0) => parse(&output.stdout),
     Ok(_) | Err(_) => return,

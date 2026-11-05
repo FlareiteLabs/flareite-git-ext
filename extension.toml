@@ -1,6 +1,6 @@
 id = "ferrite.git"
 name = "Git"
-version = "0.4.0"
+version = "0.5.0"
 description = "Source control with Git: stage, commit, and browse history; see changes side by side; file status in the explorer; the current branch."
 author = "Ferrite"
 icon = "icon.svg"
@@ -9,6 +9,8 @@ entrypoint = "../target/wasm32-unknown-unknown/release/git.wasm"
 activation = ["on-startup"]
 on_folder_changed = "ferrite.git.folderChanged"
 on_active_file_changed = "ferrite.git.activeFileChanged"
+# The cursor's line, for blame.
+on_selection_changed = "ferrite.git.selectionChanged"
 
 [permissions]
 # The file of the active document, for Open Changes; and conflicts in open
@@ -44,6 +46,14 @@ apply_title = "Stage"
 id = "scm"
 title = "Source Control"
 icon = "source-control"
+
+# Shown when there's more than one repository: choose the one the views
+# below show.
+[[views]]
+id = "repositories"
+title = "Repositories"
+container = "scm"
+hidden = true
 
 [[views]]
 id = "changes"
@@ -436,6 +446,21 @@ hidden = true
 [[commands]]
 id = "ferrite.git.mergeCompleted"
 title = "Stage a Merged File"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.selectRepository"
+title = "Choose a Repository"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.selectionChanged"
+title = "Follow the Cursor's Line"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.blameDetails"
+title = "Open the Blamed Commit"
 hidden = true
 
 [[commands]]
@@ -1058,6 +1083,12 @@ id = "sync"
 alignment = "left"
 priority = 99
 
+# Who last changed the cursor's line: click for the commit.
+[[status_items]]
+id = "blame"
+alignment = "right"
+priority = 200
+
 [configuration.explorer_marks]
 type = "boolean"
 default = true
@@ -1091,6 +1122,22 @@ type = "integer"
 default = 180
 minimum = 30
 description = "How often to fetch in the background, in seconds, when autofetch is on."
+
+[configuration.blame_line]
+type = "boolean"
+default = true
+description = "Show who last changed the cursor's line, and when, in faint text after it."
+
+[configuration.blame_status]
+type = "boolean"
+default = true
+description = "Show who last changed the cursor's line, and when, in the status bar."
+
+[configuration.performance]
+type = "string"
+default = "auto"
+choices = ["auto", "on", "off"]
+description = "Run git status with Git's file system monitor and untracked cache (faster in large repositories): auto in repositories with more than 20,000 files whose configuration doesn't set them, always (on), or never (off)."
 
 [configuration.merge_editor]
 type = "boolean"

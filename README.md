@@ -1,7 +1,8 @@
 # Git
 
 Source control with Git: stage and commit changes, see them side by side, browse the history of
-the current branch, see the Git status of files in the explorer, and the branch you're on.
+the current branch, see the Git status of files in the explorer, and the branch you're on; who
+last changed each line; and several repositories at once.
 
 ## Source Control
 
@@ -105,6 +106,32 @@ offers once to turn it on; or set `autofetch` (and `autofetch_period`, in second
 
 Every Git command and what it says when it fails are in the **Output** view, under **Git**.
 
+## Several repositories
+
+Git finds the repository the open folder is in, and repositories in its subfolders (nested ones
+and submodules) once they're listed as untracked or checked out; or, when the folder isn't in a
+repository, those in its top subfolders. With more than one, **Repositories** shows at the top
+of Source Control, each with its branch and how many files changed. The one checked is active:
+Changes, Commits, Stashes, File History, and the branch in the status bar are its. Click
+another to switch; opening a file switches to its repository too. The explorer marks, change
+markers, and conflicts work in all of them.
+
+## Blame
+
+Who last changed the line the cursor is on shows in faint text after it (the commit's message,
+who, and when: "Fix the parser, Ada (3 weeks ago)"), and in the status bar ("Ada (3 weeks ago)");
+hover either for the commit, and click the status bar's to open its details. Lines changed since
+the last commit say "Uncommitted changes". The `blame_line` and `blame_status` settings turn
+them off.
+
+## Large repositories
+
+In a repository with more than 20,000 files, `git status` runs with Git's file system monitor
+(on Windows and macOS) and untracked cache, which make it much faster, unless the repository's
+configuration sets `core.fsmonitor` or `core.untrackedCache` itself. The `performance` setting
+says when: `auto` (that), `on` (always, overriding the repository's configuration), or `off`
+(never). Nothing is written to the repository's configuration.
+
 ## Changes in the editor
 
 As you edit a file Git tracks, the lines that differ from the index are marked beside the line
@@ -175,6 +202,9 @@ or a pull in the terminal).
 | `autofetch_period`  | `180`   | How often to fetch in the background, in seconds (at least 30).                |
 | `confirm_sync`      | `true`  | Ask before syncing (pulling, then pushing).                                    |
 | `merge_editor`      | `false` | Open conflicted files from Changes in the merge editor.                        |
+| `blame_line`        | `true`  | Show the cursor line's blame after it.                                         |
+| `blame_status`      | `true`  | Show the cursor line's blame in the status bar.                                |
+| `performance`       | `auto`  | Speed up `git status` in large repositories: `auto`, `on`, or `off`.           |
 
 The colors are theme colors a theme or `[workbench.colors]` can change: `ferrite.git.modified`,
 `ferrite.git.added`, `ferrite.git.deleted`, `ferrite.git.renamed`, `ferrite.git.untracked`, and
