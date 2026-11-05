@@ -1,6 +1,6 @@
 id = "ferrite.git"
 name = "Git"
-version = "0.3.0"
+version = "0.4.0"
 description = "Source control with Git: stage, commit, and browse history; see changes side by side; file status in the explorer; the current branch."
 author = "Ferrite"
 icon = "icon.svg"
@@ -11,8 +11,11 @@ on_folder_changed = "ferrite.git.folderChanged"
 on_active_file_changed = "ferrite.git.activeFileChanged"
 
 [permissions]
-# The file of the active document, for Open Changes.
+# The file of the active document, for Open Changes; and conflicts in open
+# documents, to mark them.
 documents_read = true
+# Resolving a conflict (Accept Current Change and the like) edits its file.
+documents_write = true
 # Watching the open folder for changes.
 files_read = true
 # Deleting untracked files when their changes are discarded.
@@ -370,6 +373,72 @@ title = "Provide a Version"
 hidden = true
 
 [[commands]]
+id = "ferrite.git.acceptCurrent"
+title = "Accept Current Change"
+
+[[commands]]
+id = "ferrite.git.acceptIncoming"
+title = "Accept Incoming Change"
+
+[[commands]]
+id = "ferrite.git.acceptBoth"
+title = "Accept Both Changes"
+
+[[commands]]
+id = "ferrite.git.acceptAllCurrent"
+title = "Accept All Current"
+
+[[commands]]
+id = "ferrite.git.acceptAllIncoming"
+title = "Accept All Incoming"
+
+[[commands]]
+id = "ferrite.git.acceptAllBoth"
+title = "Accept All Both"
+
+[[commands]]
+id = "ferrite.git.nextConflict"
+title = "Next Conflict"
+
+[[commands]]
+id = "ferrite.git.previousConflict"
+title = "Previous Conflict"
+
+[[commands]]
+id = "ferrite.git.compareConflict"
+title = "Compare Current and Incoming Changes"
+
+[[commands]]
+id = "ferrite.git.openMergeEditor"
+title = "Open in Merge Editor"
+
+[[commands]]
+id = "ferrite.git.continueOperation"
+title = "Continue"
+
+[[commands]]
+id = "ferrite.git.abortOperation"
+title = "Abort"
+
+[[commands]]
+id = "ferrite.git.skipRebase"
+title = "Skip Commit (Rebase)"
+
+[[commands]]
+id = "ferrite.git.rebaseBranch"
+title = "Rebase Branch…"
+
+[[commands]]
+id = "ferrite.git.openConflict"
+title = "Open a Conflicted File"
+hidden = true
+
+[[commands]]
+id = "ferrite.git.mergeCompleted"
+title = "Stage a Merged File"
+hidden = true
+
+[[commands]]
 id = "ferrite.git.original"
 title = "Name a File's Original"
 hidden = true
@@ -390,6 +459,51 @@ title = "List a Commit's Files"
 hidden = true
 
 # The Changes view's header.
+# While a merge, rebase, cherry-pick, or revert waits.
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.continueOperation"
+inline = true
+icon = "play"
+when = "operation"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.abortOperation"
+inline = true
+icon = "stop"
+when = "operation"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.continueOperation"
+group = "0_operation"
+when = "operation"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.abortOperation"
+group = "0_operation"
+when = "operation"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.skipRebase"
+group = "0_operation"
+when = "rebasing"
+
+[[menus]]
+location = "view/title"
+view = "changes"
+command = "ferrite.git.rebaseBranch"
+group = "5_branch"
+when = "repository"
+
 [[menus]]
 location = "view/title"
 view = "changes"
@@ -612,6 +726,22 @@ contexts = ["changes-group"]
 command = "ferrite.git.stageAll"
 inline = true
 icon = "add"
+
+# Conflicted files.
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["merge"]
+command = "ferrite.git.openMergeEditor"
+inline = true
+icon = "merge"
+
+[[menus]]
+location = "view/item"
+view = "changes"
+contexts = ["merge"]
+command = "ferrite.git.openMergeEditor"
+group = "1_open"
 
 # The Changes view's files.
 [[menus]]
@@ -962,6 +1092,11 @@ default = 180
 minimum = 30
 description = "How often to fetch in the background, in seconds, when autofetch is on."
 
+[configuration.merge_editor]
+type = "boolean"
+default = false
+description = "Open files with merge conflicts from the Changes view in the merge editor, rather than as files with their conflicts marked."
+
 [configuration.confirm_sync]
 type = "boolean"
 default = true
@@ -998,3 +1133,29 @@ light = "#007100"
 description = "Files with merge conflicts"
 dark = "#e4676b"
 light = "#ad0707"
+
+# Merge conflicts in files: each side's lines, and the marker lines above
+# and below them (VS Code's colors).
+[decorations.conflict-current-header]
+background = "#40c8ae80"
+whole_line = true
+
+[decorations.conflict-current]
+background = "#40c8ae33"
+whole_line = true
+
+[decorations.conflict-base-header]
+background = "#60606066"
+whole_line = true
+
+[decorations.conflict-base]
+background = "#60606029"
+whole_line = true
+
+[decorations.conflict-incoming]
+background = "#40a6ff33"
+whole_line = true
+
+[decorations.conflict-incoming-header]
+background = "#40a6ff80"
+whole_line = true

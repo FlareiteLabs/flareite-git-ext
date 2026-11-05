@@ -70,8 +70,31 @@ instead, which pushes it to a remote and follows it from then on.
 The "…" menu of **Changes**, and the command palette, have **Pull**, **Pull (Rebase)**, **Push**,
 **Sync**, **Fetch**, **Fetch (Prune)**, **Fetch From All Remotes**, **Checkout to…**, **Create
 Branch…**, **Create Branch From…**, **Rename Branch…**, **Delete Branch…** (one that isn't merged
-is deleted only after asking), **Merge Branch…**, **Publish Branch**, **Add Remote…**, and
-**Remove Remote…**.
+is deleted only after asking), **Merge Branch…**, **Rebase Branch…**, **Publish Branch**, **Add
+Remote…**, and **Remove Remote…**.
+
+## Merge conflicts
+
+When a merge, rebase, cherry-pick, revert, or stash stops for conflicts, the conflicted files are
+under **Merge Changes**, the branch in the status bar says what's in progress (`main
+(Merging)`), and **Changes** says what to do, with **Continue** (▶) and **Abort** (■) buttons
+(and, in a rebase, **Skip Commit** in its "…" menu). Continue makes the merge's commit with the
+message Git prepared, or carries on the rebase, cherry-pick, or revert; committing with an empty
+message box does the same. Abort asks first, then puts things back as they were.
+
+A conflicted file shows each conflict's current change (green) and incoming change (blue), with
+links above it, as VS Code does: **Accept Current Change**, **Accept Incoming Change**, **Accept
+Both Changes**, **Compare Changes** (the file with every conflict as each side has it, side by
+side), and **Resolve in Merge Editor**. The command palette also has **Accept All Current**,
+**Accept All Incoming**, **Accept All Both**, and **Next Conflict** and **Previous Conflict**.
+Staging a file that still has conflict markers asks first.
+
+The **merge editor** (Resolve in Merge Editor, the merge button on a conflicted file, or every
+conflicted file you open from Changes with the `merge_editor` setting on) shows the incoming
+version and the current one above the result, lined up. The result starts as their common base
+with the changes that don't conflict already made. Above each change are buttons to accept it,
+or both sides; above each conflict in the result, to accept either side or both, or reset it.
+You can also edit the result yourself. **Complete Merge** saves the file and stages it.
 
 **Signing in.** When a remote needs a username and password (or SSH a key's passphrase), Ferrite
 asks you in the command palette, hiding what you type for passwords. Git Credential Manager or an
@@ -130,7 +153,10 @@ or a pull in the terminal).
 
 ## Permissions
 
-- **Read open documents**: to know the active document's file, for **Open Changes**.
+- **Read open documents**: to know the active document's file, for **Open Changes**, and to find
+  and mark merge conflicts in open files.
+- **Edit open documents**: to resolve a conflict when you click Accept Current Change and the
+  like.
 - **Run programs on this computer**: Git, which can ask you to sign in to remotes. Git can run code from the repository it works on
   (hooks, and programs its configuration names), so it runs only in folders you trust.
 - **Read the files in the open folder**: to notice when they change.
@@ -148,6 +174,7 @@ or a pull in the terminal).
 | `autofetch`         | `false` | Fetch from the remotes in the background.                                      |
 | `autofetch_period`  | `180`   | How often to fetch in the background, in seconds (at least 30).                |
 | `confirm_sync`      | `true`  | Ask before syncing (pulling, then pushing).                                    |
+| `merge_editor`      | `false` | Open conflicted files from Changes in the merge editor.                        |
 
 The colors are theme colors a theme or `[workbench.colors]` can change: `ferrite.git.modified`,
 `ferrite.git.added`, `ferrite.git.deleted`, `ferrite.git.renamed`, `ferrite.git.untracked`, and

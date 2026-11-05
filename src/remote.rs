@@ -104,6 +104,8 @@ pub enum Ask {
   ForceDelete(String),
   /// The branch to merge into this one.
   Merge,
+  /// The branch to rebase this one onto.
+  Rebase,
   /// The remote to publish a branch to.
   PublishTo(String),
   /// A new remote's name, then its address.
@@ -324,6 +326,19 @@ pub fn merge_branch() {
     "Select a branch to merge into the current one",
     true,
     Ask::Merge,
+  );
+}
+
+/// Rebases the current branch onto another: its commits since they parted
+/// are made again on top of it.
+pub fn rebase_branch() {
+  if branch().and_then(|branch| branch.head).is_none() {
+    return info("Check out a branch to rebase it.");
+  }
+  pick_ref(
+    "Select a branch to rebase the current one onto",
+    true,
+    Ask::Rebase,
   );
 }
 
@@ -658,6 +673,11 @@ pub fn answered(ask: Ask, value: AnswerValue) {
     (Ask::Merge, AnswerValue::Picked(full)) => operate(operation(
       "Merging",
       args(&["merge", short(&full)]),
+      Then::Nothing,
+    )),
+    (Ask::Rebase, AnswerValue::Picked(full)) => operate(operation(
+      "Rebasing",
+      args(&["-c", "core.editor=true", "rebase", short(&full)]),
       Then::Nothing,
     )),
     (Ask::PublishTo(current), AnswerValue::Picked(remote)) => publish_to(&remote, &current),

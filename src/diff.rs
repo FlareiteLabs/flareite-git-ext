@@ -7,13 +7,39 @@
 //! hash, or `<hash>^` for its first parent), or nothing for the index, as in
 //! `git show :<path>`. `git:~empty:<path>` is an empty text, for the side
 //! where a file doesn't exist; Git doesn't allow `~` in names, so it's no
-//! revision's.
+//! revision's. A conflicted file's versions are `~1` (their base), `~2`
+//! (ours), and `~3` (theirs), and `~current` and `~incoming` are the file
+//! with every conflict resolved to that side.
 
 use crate::history::FileChange;
 use crate::status::{Entry, Kind};
 
 /// The revision of an empty text.
 pub const EMPTY: &str = "~empty";
+/// A conflicted file with each conflict as its current side has it, or its
+/// incoming side, for comparing them.
+pub const CONFLICT_CURRENT: &str = "~current";
+pub const CONFLICT_INCOMING: &str = "~incoming";
+
+/// The side a conflict revision resolves to.
+pub fn conflict_side(revision: &str) -> Option<crate::conflicts::Choice> {
+  match revision {
+    CONFLICT_CURRENT => Some(crate::conflicts::Choice::Current),
+    CONFLICT_INCOMING => Some(crate::conflicts::Choice::Incoming),
+    _ => None,
+  }
+}
+
+/// The index stage a revision names: `~1` (the base), `~2` (ours), or
+/// `~3` (theirs), of a conflicted file.
+pub fn stage(revision: &str) -> Option<char> {
+  match revision {
+    "~1" => Some('1'),
+    "~2" => Some('2'),
+    "~3" => Some('3'),
+    _ => None,
+  }
+}
 
 /// The address of the file at `path` in `revision`.
 pub fn address(revision: &str, path: &str) -> String {

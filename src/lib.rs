@@ -13,17 +13,19 @@
 //! meanwhile run one more. Commands that change the repository run one
 //! after another, each followed by a status.
 
+mod conflicts;
 mod diff;
 mod graph;
 mod history;
 mod panel;
+mod progress;
 mod remote;
 mod stash;
 mod status;
 mod timeline;
 
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use ferrite_extension_api::documents;
 use ferrite_extension_api::explorer::{self, FileMark};
@@ -32,7 +34,7 @@ use ferrite_extension_api::prompts::{self, AnswerValue, ConfirmOptions, InputOpt
 use ferrite_extension_api::quick_diff;
 use ferrite_extension_api::types::{
   Activation, CommandContext, ConfigValue, DocumentChange, DocumentId, DocumentInfo, LogLevel,
-  MessageLevel, PreviewElement, PreviewNode, PreviewOptions, StatusItem,
+  MessageLevel, PreviewElement, PreviewNode, PreviewOptions,
 };
 use ferrite_extension_api::views::{self, Welcome, WelcomeButton};
 use ferrite_extension_api::{Guest, export_extension, files, host, workbench, workspace};
@@ -70,6 +72,8 @@ enum Job {
   Operation(Operation),
   /// A fetch in the background, whose failures are only logged.
   Fetch,
+  /// Asking which operation is in progress (see `progress.rs`).
+  Progress,
 }
 
 /// A command that changes the repository.
@@ -126,6 +130,10 @@ enum Pending {
   Remote(remote::Ask),
   /// About stashes.
   Stash(stash::Ask),
+  /// Whether to abort what's in progress.
+  Abort(progress::Progress),
+  /// Whether to stage files that still have conflict markers.
+  StageConflicts(Vec<String>),
 }
 
 #[derive(Default)]
@@ -155,6 +163,12 @@ struct State {
   busy: Option<String>,
   /// The timer of the next background fetch.
   autofetch_timer: Option<u64>,
+  /// Open documents whose conflicts are shown.
+  conflicted_documents: HashSet<DocumentId>,
+  /// What's in progress: a merge, rebase, cherry-pick, or revert.
+  progress: Option<progress::Progress>,
+  /// The Changes view lists only some of the changes.
+  too_many_changes: bool,
 }
 
 thread_local! {
@@ -323,6 +337,7 @@ fn clear_output() {
   let _ = explorer::set_file_marks(&[]);
   let _ = workbench::set_status_item("branch", None);
   let _ = workbench::set_status_item("sync", None);
+  with_state(|state| state.progress = None);
   // No repository: nothing to fetch.
   if let Some(timer) = with_state(|state| state.autofetch_timer.take()) {
     ferrite_extension_api::timers::clear_timer(timer);
@@ -452,6 +467,7 @@ fn set_changes_flags() {
   if tree_view() {
     flags.push("tree".into());
   }
+  flags.extend(progress::flags());
   let _ = views::set_flags(CHANGES, &flags);
 }
 
@@ -560,6 +576,7 @@ fn job_finished() {
     Job::Log { skip } => log_finished(skip, finished.outcome),
     Job::Operation(operation) => operation_finished(operation, finished.outcome),
     Job::Fetch => refresh(),
+    Job::Progress => progress::finished(finished.outcome),
   }
 }
 
@@ -630,35 +647,26 @@ fn show(status: Status) {
   if let Err(problem) = explorer::set_file_marks(&marks) {
     log(LogLevel::Error, &format!("can't mark files: {problem:?}"));
   }
-  let _ = workbench::set_status_item(
-    "branch",
-    Some(&StatusItem {
-      text: branch_text(&status),
-      tooltip: Some(branch_tooltip(&status)),
-      command: Some("ferrite.git.checkout".into()),
-    }),
-  );
-
   let (items, count) = panel::changes(&status, tree_view());
   if let Err(problem) = views::set_items(CHANGES, &items) {
     log(LogLevel::Error, &format!("can't list changes: {problem:?}"));
   }
   let _ = views::set_welcome(CHANGES, None);
   let _ = views::set_badge(CHANGES, u32::try_from(count).unwrap_or(u32::MAX));
-  let _ = workbench::set_view_message(
-    CHANGES,
-    (count > panel::MAX_FILES)
-      .then(|| format!("Too many changes: showing the first {}.", panel::MAX_FILES))
-      .as_deref(),
-  );
 
   let head = status.branch.oid.clone();
   let reload = with_state(|state| {
     let reload = state.history_head.as_ref() != Some(&head);
     state.history_head = Some(head.clone());
     state.status = Some(status);
+    state.too_many_changes = count > panel::MAX_FILES;
     reload
   });
+  // The branch item and the view's message, until Git says what's in
+  // progress.
+  progress::show();
+  progress::check();
+  conflicts::refresh_open();
   remote::update_sync();
   if reload {
     match head {
@@ -798,6 +806,16 @@ fn operation_finished(operation: Operation, outcome: Result<ProcessOutput, Proce
     && matches!(&outcome, Ok(output) if output.exit_code == Some(0));
   let succeeded = match outcome {
     Ok(output) if output.exit_code == Some(0) => true,
+    Ok(output) if stopped_for_conflicts(&output) => {
+      host::show_message(
+        MessageLevel::Warning,
+        &format!(
+          "{} stopped for merge conflicts. Resolve them and stage the files, then Continue (or Abort).",
+          operation.title
+        ),
+      );
+      false
+    }
     Ok(output) => {
       error(&format!("{} failed: {}", operation.title, failure(&output)));
       false
@@ -834,6 +852,12 @@ fn operation_finished(operation: Operation, outcome: Result<ProcessOutput, Proce
   if reached_remote {
     remote::offer_autofetch();
   }
+}
+
+/// Whether Git stopped because of conflicts, leaving them to resolve.
+fn stopped_for_conflicts(output: &ProcessOutput) -> bool {
+  let said = |bytes: &[u8]| String::from_utf8_lossy(bytes).contains("CONFLICT (");
+  said(&output.stdout) || said(&output.stderr)
 }
 
 fn operation(title: &str, operation_args: Vec<String>, then: Then) -> Operation {
@@ -875,14 +899,65 @@ fn has_head() -> bool {
   })
 }
 
+/// Stages files, asking first if conflicted ones still have conflict
+/// markers.
 fn stage(paths: Vec<String>) {
-  if !paths.is_empty() {
-    operate(operation(
-      "Staging",
-      with_paths(&["add", "-A"], &paths),
-      Then::Nothing,
-    ));
+  if paths.is_empty() {
+    return;
   }
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  let marked = paths
+    .iter()
+    .filter(|path| {
+      let path = absolute(&root, path);
+      is_conflicted(&path)
+        && files::read_file(&path).is_ok_and(|text| conflicts::has_conflicts(&text))
+    })
+    .count();
+  if marked > 0 {
+    let message = if marked == 1 {
+      "A file still has merge conflicts. Stage it anyway?".to_owned()
+    } else {
+      format!("{marked} files still have merge conflicts. Stage them anyway?")
+    };
+    return ask_confirm(
+      &message,
+      "Their conflict markers would be committed.",
+      &["Stage"],
+      false,
+      Pending::StageConflicts(paths),
+    );
+  }
+  stage_now(paths);
+}
+
+fn stage_now(paths: Vec<String>) {
+  operate(operation(
+    "Staging",
+    with_paths(&["add", "-A"], &paths),
+    Then::Nothing,
+  ));
+}
+
+/// Whether the file at `path` (absolute) has merge conflicts, as Git's
+/// status says.
+fn is_conflicted(path: &str) -> bool {
+  let Some((root, _)) = repository() else {
+    return false;
+  };
+  let Some(relative) = relative_path(&root, path) else {
+    return false;
+  };
+  with_state(|state| {
+    state.status.as_ref().is_some_and(|status| {
+      status
+        .entries
+        .iter()
+        .any(|entry| entry.kind == Kind::Conflict && entry.path == relative)
+    })
+  })
 }
 
 fn unstage(paths: Vec<String>) {
@@ -1045,6 +1120,17 @@ fn commit(kind: CommitKind) {
     return;
   }
   let message = views::input(CHANGES).unwrap_or_default();
+  if message.trim().is_empty() && progress::commits_with_prepared_message() {
+    // A merge (or cherry-pick, or revert) has its message ready.
+    return operate(Operation {
+      title: "Committing".into(),
+      args: args(&["commit", "--no-edit", "--quiet"]),
+      stdin: None,
+      cwd: None,
+      then: Then::ClearMessage,
+      remote: false,
+    });
+  }
   if message.trim().is_empty() && kind != CommitKind::Amend {
     let input = InputOptions {
       title: "Commit message".into(),
@@ -1285,12 +1371,183 @@ fn provide() {
       return Some(String::new());
     }
     let (root, _) = repository()?;
-    let object = format!("{revision}:{path}");
+    if let Some(choice) = diff::conflict_side(revision) {
+      return Some(conflicts::resolve_all(
+        &current_text(&absolute(&root, path)),
+        choice,
+      ));
+    }
+    // A conflicted file's versions: its base (1), ours (2), theirs (3).
+    // One that's missing (a file both sides added has no base) is empty.
+    let stage = diff::stage(revision);
+    let object = match stage {
+      Some(stage) => format!(":{stage}:{path}"),
+      None => format!("{revision}:{path}"),
+    };
     let output = run_git(&args(&["cat-file", "blob", &object]), &options(&root)).ok()?;
-    (output.exit_code == Some(0)).then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+    match output.exit_code {
+      Some(0) => Some(String::from_utf8_lossy(&output.stdout).into_owned()),
+      _ if stage.is_some() => Some(String::new()),
+      _ => None,
+    }
   });
   if let Err(problem) = documents::provide(&uri, text.as_deref()) {
     log(LogLevel::Warn, &format!("can't provide {uri}: {problem:?}"));
+  }
+}
+
+/// A file's text as it's being edited: its open document's, or else what's
+/// on disk.
+fn current_text(path: &str) -> String {
+  let open = host::documents().ok().and_then(|documents| {
+    let document = documents
+      .into_iter()
+      .find(|document| document.path.as_deref() == Some(path))?;
+    let slice = host::read_lines(document.id, 0, document.line_count).ok()?;
+    Some(slice.lines.join("\n"))
+  });
+  open
+    .or_else(|| files::read_file(path).ok())
+    .unwrap_or_default()
+}
+
+/// The file a conflict command is for: the code lens's or the active
+/// document's, or a path chosen in a view.
+fn conflict_file(context: &CommandContext) -> Option<String> {
+  let (root, _) = repository()?;
+  let argument = workbench::command_argument();
+  let from_document = || host::document(context.document?).ok()?.path;
+  match argument {
+    // A code lens's argument is its line.
+    Some(line) if line.parse::<usize>().is_ok() => from_document(),
+    Some(path) if is_within(&path, &root) => Some(path),
+    Some(relative) => Some(absolute(&root, &relative)),
+    None => from_document(),
+  }
+}
+
+/// Compares a conflicted file's sides: every conflict as the current side
+/// has it, against every conflict as the incoming side has it.
+fn compare_conflict(context: &CommandContext) {
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  let Some(path) = conflict_file(context) else {
+    return info("Open a file with merge conflicts first.");
+  };
+  let Some(relative) = relative_path(&root, &path) else {
+    return info(&format!("{path} isn't in the repository."));
+  };
+  let current = diff::address(diff::CONFLICT_CURRENT, &relative);
+  let incoming = diff::address(diff::CONFLICT_INCOMING, &relative);
+  // They're worked out again from the file as it is now.
+  let _ = documents::changed(&[current.clone(), incoming.clone()]);
+  open_diff(diff::Sides {
+    original: current,
+    modified: incoming,
+    title: format!(
+      "{}: Current Changes \u{2194} Incoming Changes",
+      relative.rsplit('/').next().unwrap_or(&relative)
+    ),
+  });
+}
+
+/// The commit being brought in, for the merge editor: its branch's name if
+/// it has one.
+fn incoming_name(progress: Option<progress::Progress>) -> Option<String> {
+  let (root, _) = repository()?;
+  let head = progress.map_or("MERGE_HEAD", progress::Progress::head);
+  let output = run_git(
+    &args(&[
+      "name-rev",
+      "--name-only",
+      "--no-undefined",
+      "--exclude=refs/tags/*",
+      head,
+    ]),
+    &options(&root),
+  )
+  .ok()?;
+  let name = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+  (output.exit_code == Some(0) && !name.is_empty()).then_some(name)
+}
+
+/// Opens a conflicted file in the merge editor: theirs and ours above the
+/// result, which starts again from their base if the file still has
+/// conflict markers.
+fn open_merge_editor(context: &CommandContext) {
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  let Some(path) = conflict_file(context) else {
+    return info("Open a file with merge conflicts first.");
+  };
+  merge_editor_for(&root, &path);
+}
+
+fn merge_editor_for(root: &str, path: &str) {
+  let Some(relative) = relative_path(root, path) else {
+    return info(&format!("{path} isn't in the repository."));
+  };
+  if !is_conflicted(path) {
+    return info(&format!("{relative} has no merge conflicts."));
+  }
+  let in_progress = progress::current();
+  let current = with_state(|state| {
+    state
+      .status
+      .as_ref()
+      .and_then(|status| status.branch.head.clone())
+  });
+  let marked = conflicts::has_conflicts(&current_text(path));
+  let name = relative.rsplit('/').next().unwrap_or(&relative).to_owned();
+  let options = documents::MergeOptions {
+    base: diff::address("~1", &relative),
+    incoming: documents::MergeSide {
+      uri: diff::address("~3", &relative),
+      title: "Incoming".into(),
+      description: incoming_name(in_progress),
+    },
+    current: documents::MergeSide {
+      uri: diff::address("~2", &relative),
+      title: "Current".into(),
+      description: current,
+    },
+    result_file: path.to_owned(),
+    title: format!("Merging: {name}"),
+    reset_result: marked,
+    on_complete: Some("ferrite.git.mergeCompleted".into()),
+  };
+  if let Err(problem) = documents::open_merge(&options) {
+    error(&format!("Opening the merge editor failed: {problem:?}"));
+  }
+}
+
+/// Opens conflicted files from the Changes view: in the merge editor if
+/// the `merge_editor` setting says so, else as files.
+fn open_conflicts(paths: Vec<String>) {
+  let use_editor = matches!(setting("merge_editor"), Some(ConfigValue::Boolean(true)));
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  if !use_editor {
+    return open(paths);
+  }
+  for path in paths.iter().take(10) {
+    merge_editor_for(&root, &absolute(&root, path));
+  }
+}
+
+/// The merge editor's result was saved: it's resolved, so it's staged.
+fn merge_completed() {
+  let Some((root, _)) = repository() else {
+    return;
+  };
+  let Some(path) = workbench::command_argument() else {
+    return;
+  };
+  if let Some(relative) = relative_path(&root, &path) {
+    stage_now(vec![relative]);
   }
 }
 
@@ -1642,6 +1899,8 @@ fn answered() {
     }
     (Pending::Remote(ask), value) => remote::answered(ask, value),
     (Pending::Stash(ask), value) => stash::answered(ask, value),
+    (Pending::Abort(what), AnswerValue::Button(0)) => progress::do_abort(what),
+    (Pending::StageConflicts(paths), AnswerValue::Button(0)) => stage_now(paths),
     _ => {}
   }
 }
@@ -1808,6 +2067,22 @@ impl Guest for Git {
       "branchAt" => remote::branch_at(&chosen()),
       "clone" => remote::clone(),
       "addToGitignore" => add_to_gitignore(chosen()),
+      "acceptCurrent" => conflicts::accept(&context, conflicts::Choice::Current),
+      "acceptIncoming" => conflicts::accept(&context, conflicts::Choice::Incoming),
+      "acceptBoth" => conflicts::accept(&context, conflicts::Choice::Both),
+      "acceptAllCurrent" => conflicts::accept_all(&context, conflicts::Choice::Current),
+      "acceptAllIncoming" => conflicts::accept_all(&context, conflicts::Choice::Incoming),
+      "acceptAllBoth" => conflicts::accept_all(&context, conflicts::Choice::Both),
+      "nextConflict" => conflicts::go_to(&context, false),
+      "previousConflict" => conflicts::go_to(&context, true),
+      "compareConflict" => compare_conflict(&context),
+      "openMergeEditor" => open_merge_editor(&context),
+      "openConflict" => open_conflicts(chosen()),
+      "mergeCompleted" => merge_completed(),
+      "continueOperation" => progress::continue_operation(),
+      "abortOperation" => progress::abort(),
+      "skipRebase" => progress::skip(),
+      "rebaseBranch" => remote::rebase_branch(),
       "original" => original(),
       "stageChanges" => stage_changes(),
       "stageSelectedRanges" => {
@@ -1857,9 +2132,17 @@ impl Guest for Git {
     Ok(())
   }
 
-  fn document_opened(_: DocumentInfo) {}
-  fn document_changed(_: DocumentChange) {}
-  fn document_closed(_: DocumentId) {}
+  fn document_opened(document: DocumentInfo) {
+    conflicts::opened(&document);
+  }
+
+  fn document_changed(change: DocumentChange) {
+    conflicts::changed(&change);
+  }
+
+  fn document_closed(document: DocumentId) {
+    conflicts::closed(document);
+  }
 }
 
 export_extension!(Git);

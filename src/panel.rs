@@ -55,7 +55,8 @@ impl Group {
   fn command(self, kind: Kind) -> &'static str {
     match (self, kind) {
       (Self::Staged, _) => "ferrite.git.openStagedChange",
-      (Self::Changes, Kind::Untracked) | (Self::Merge, _) => "ferrite.git.open",
+      (Self::Merge, _) => "ferrite.git.openConflict",
+      (Self::Changes, Kind::Untracked) => "ferrite.git.open",
       (Self::Changes, _) => "ferrite.git.openChange",
     }
   }
