@@ -12,6 +12,9 @@ on_active_file_changed = "flareite.git.activeFileChanged"
 # The cursor's line, for blame.
 on_selection_changed = "flareite.git.selectionChanged"
 
+[engines]
+flareite = ">=0.1.0"
+
 [permissions]
 # The file of the active document, for Open Changes; and conflicts in open
 # documents, to mark them.
@@ -23,6 +26,11 @@ files_read = true
 # Deleting untracked files when their changes are discarded.
 files_write = true
 processes = true
+
+[build]
+command = "cargo"
+args = ["build", "--release"]
+watch = ["src", "Cargo.toml"]
 
 # Git can ask for a username and password, or SSH for a key's
 # passphrase: Flareite asks you.
