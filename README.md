@@ -95,7 +95,9 @@ conflicted file you open from Changes with the `merge_editor` setting on) shows 
 version and the current one above the result, lined up. The result starts as their common base
 with the changes that don't conflict already made. Above each change are buttons to accept it,
 or both sides; above each conflict in the result, to accept either side or both, or reset it.
-You can also edit the result yourself. **Complete Merge** saves the file and stages it.
+You can also edit the result yourself. The result's header counts the conflicts left, with
+buttons to go to them (also F7 and Shift+F7). **Complete Merge** saves the file, stages it, and
+closes the tab, asking first if conflicts are left. Merge tabs come back when Flareite restarts.
 
 **Signing in.** When a remote needs a username and password (or SSH a key's passphrase), Flareite
 asks you in the command palette, hiding what you type for passwords. Git Credential Manager or an
@@ -148,8 +150,13 @@ The last commit's, the index's, and older commits' versions of a file show besid
 version, with changed lines and characters marked. Unchanged lines away from changes collapse;
 click a bar to show them. The buttons beside the tabs (and **Diff** commands) go to the next
 (F7) or previous (Shift+F7) change, switch between side by side and inline, show or ignore
-whitespace at the ends of lines, and collapse unchanged lines or not. A diff tab updates as you
-edit the file, stage, or commit.
+whitespace at the ends of lines, and collapse unchanged lines or not (the `diff_*` settings
+below). Narrower than 900 pixels, a diff shows inline. In a diff of a file's changes not staged,
+**Stage Selected Ranges** and **Revert Selected Ranges** act on the lines you've selected in the
+file. A diff tab updates as you edit the file, stage, or commit.
+
+Diff tabs and the merge editor are this extension's own layouts (Flareite's extension API 1.15):
+the comparing happens in the extension, which tells the editor what to draw.
 
 In a folder that isn't a repository, the view offers **Initialize Repository**. In a folder you
 haven't trusted, it offers **Trust Folder**: Git doesn't run there until you do.
@@ -192,19 +199,22 @@ or a pull in the terminal).
 
 ## Settings
 
-| Setting             | Default | What it does                                                                   |
-| ------------------- | ------- | ------------------------------------------------------------------------------ |
-| `explorer_marks`    | `true`  | Show the Git status of files in the explorer.                                  |
-| `smart_commit`      | `ask`   | With nothing staged, `ask` whether to commit everything, `always`, or `never`. |
-| `discard_untracked` | `trash` | Discarding an untracked file moves it to the `trash`, or `delete`s it.         |
-| `changes_view`      | `list`  | Show changed files as a `list` or a `tree` of folders.                         |
-| `autofetch`         | `false` | Fetch from the remotes in the background.                                      |
-| `autofetch_period`  | `180`   | How often to fetch in the background, in seconds (at least 30).                |
-| `confirm_sync`      | `true`  | Ask before syncing (pulling, then pushing).                                    |
-| `merge_editor`      | `false` | Open conflicted files from Changes in the merge editor.                        |
-| `blame_line`        | `true`  | Show the cursor line's blame after it.                                         |
-| `blame_status`      | `true`  | Show the cursor line's blame in the status bar.                                |
-| `performance`       | `auto`  | Speed up `git status` in large repositories: `auto`, `on`, or `off`.           |
+| Setting                   | Default | What it does                                                                   |
+| ------------------------- | ------- | ------------------------------------------------------------------------------ |
+| `explorer_marks`          | `true`  | Show the Git status of files in the explorer.                                  |
+| `smart_commit`            | `ask`   | With nothing staged, `ask` whether to commit everything, `always`, or `never`. |
+| `discard_untracked`       | `trash` | Discarding an untracked file moves it to the `trash`, or `delete`s it.         |
+| `changes_view`            | `list`  | Show changed files as a `list` or a `tree` of folders.                         |
+| `autofetch`               | `false` | Fetch from the remotes in the background.                                      |
+| `autofetch_period`        | `180`   | How often to fetch in the background, in seconds (at least 30).                |
+| `confirm_sync`            | `true`  | Ask before syncing (pulling, then pushing).                                    |
+| `merge_editor`            | `false` | Open conflicted files from Changes in the merge editor.                        |
+| `diff_inline`             | `false` | Show diffs inline rather than side by side.                                    |
+| `diff_ignore_whitespace`  | `true`  | Whitespace at the ends of lines doesn't count as a change.                     |
+| `diff_collapse_unchanged` | `true`  | Collapse unchanged lines away from changes.                                    |
+| `blame_line`              | `true`  | Show the cursor line's blame after it.                                         |
+| `blame_status`            | `true`  | Show the cursor line's blame in the status bar.                                |
+| `performance`             | `auto`  | Speed up `git status` in large repositories: `auto`, `on`, or `off`.           |
 
 The colors are theme colors a theme or `[workbench.colors]` can change: `flareite.git.modified`,
 `flareite.git.added`, `flareite.git.deleted`, `flareite.git.renamed`, `flareite.git.untracked`, and

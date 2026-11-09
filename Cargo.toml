@@ -12,6 +12,8 @@ crate-type = ["cdylib"]
 [dependencies]
 # The editor's repository, checked out beside this one.
 flareite-extension-api = { path = "../editor/crates/flareite-extension-api" }
+# Comparing texts, for diff and merge tabs: compiled into the extension.
+flareite-diff = { path = "../editor/crates/flareite-diff" }
 
 [profile.release]
 opt-level = "s"

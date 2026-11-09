@@ -1,6 +1,6 @@
 id = "flareite.git"
 name = "Git"
-version = "0.5.0"
+version = "0.6.0"
 description = "Source control with Git: stage, commit, and browse history; see changes side by side; file status in the explorer; the current branch."
 author = "Flareite"
 icon = "icon.svg"
@@ -451,10 +451,93 @@ id = "flareite.git.openConflict"
 title = "Open a Conflicted File"
 hidden = true
 
+# Diff and merge tabs (the layouts below).
 [[commands]]
-id = "flareite.git.mergeCompleted"
-title = "Stage a Merged File"
+id = "flareite.git.diffLayout"
+title = "Show a Diff Tab"
 hidden = true
+
+[[commands]]
+id = "flareite.git.mergeLayout"
+title = "Show a Merge Tab"
+hidden = true
+
+[[commands]]
+id = "flareite.git.nextChange"
+title = "Go to Next Change"
+
+[[commands]]
+id = "flareite.git.previousChange"
+title = "Go to Previous Change"
+
+[[commands]]
+id = "flareite.git.diffToggleInline"
+title = "Toggle Inline Diff"
+
+[[commands]]
+id = "flareite.git.diffToggleWhitespace"
+title = "Toggle Ignoring Leading and Trailing Whitespace in Diffs"
+
+[[commands]]
+id = "flareite.git.diffToggleUnchanged"
+title = "Toggle Collapsing Unchanged Lines in Diffs"
+
+[[commands]]
+id = "flareite.git.diffReveal"
+title = "Show Unchanged Lines"
+hidden = true
+
+[[commands]]
+id = "flareite.git.diffStageSelected"
+title = "Stage Selected Ranges in the Diff"
+hidden = true
+
+[[commands]]
+id = "flareite.git.diffRevertSelected"
+title = "Revert Selected Ranges in the Diff"
+hidden = true
+
+[[commands]]
+id = "flareite.git.diffOpenFile"
+title = "Open the Diff's File"
+hidden = true
+
+[[commands]]
+id = "flareite.git.mergeAccept"
+title = "Accept a Change in the Merge"
+hidden = true
+
+[[commands]]
+id = "flareite.git.mergeComplete"
+title = "Complete Merge"
+
+[[commands]]
+id = "flareite.git.mergeOpenFile"
+title = "Open the Merged File"
+hidden = true
+
+# Two versions of a file compared, side by side or inline.
+[[layouts]]
+id = "diff"
+title = "Diff"
+command = "flareite.git.diffLayout"
+
+# A conflicted file's incoming and current versions above the result.
+[[layouts]]
+id = "merge"
+title = "Merge Editor"
+command = "flareite.git.mergeLayout"
+
+# Moving between a diff's changes, or a merge's conflicts.
+[[keybindings]]
+command = "flareite.git.nextChange"
+key = "f7"
+layouts = ["diff", "merge"]
+
+[[keybindings]]
+command = "flareite.git.previousChange"
+key = "shift+f7"
+layouts = ["diff", "merge"]
 
 [[commands]]
 id = "flareite.git.selectRepository"
@@ -1152,6 +1235,21 @@ type = "boolean"
 default = false
 description = "Open files with merge conflicts from the Changes view in the merge editor, rather than as files with their conflicts marked."
 
+[configuration.diff_inline]
+type = "boolean"
+default = false
+description = "Show diffs inline (both versions in one editor), rather than side by side. Diffs narrower than 900 pixels always show inline."
+
+[configuration.diff_ignore_whitespace]
+type = "boolean"
+default = true
+description = "In diffs, whitespace at the start and end of lines doesn't count as a change."
+
+[configuration.diff_collapse_unchanged]
+type = "boolean"
+default = true
+description = "In diffs, collapse unchanged lines away from changes behind a bar that shows them."
+
 [configuration.confirm_sync]
 type = "boolean"
 default = true
@@ -1213,4 +1311,59 @@ whole_line = true
 
 [decorations.conflict-incoming-header]
 background = "#40a6ff80"
+whole_line = true
+
+# Diff tabs: changed lines and characters, in the theme's diff colors.
+[decorations.inserted-line]
+background = "diff-inserted-line"
+whole_line = true
+
+[decorations.removed-line]
+background = "diff-removed-line"
+whole_line = true
+
+[decorations.inserted-text]
+background = "diff-inserted-text"
+
+[decorations.removed-text]
+background = "diff-removed-text"
+
+# Where a diff's changes are, beside the scroll bar.
+[decorations.ruler-inserted]
+border = "editor-gutter-added"
+
+[decorations.ruler-removed]
+border = "editor-gutter-removed"
+
+[decorations.ruler-changed]
+border = "editor-gutter-modified"
+
+# The merge editor: each side's changes, more strongly once accepted, and
+# what the result has of each range (both sides' changes look current's).
+[decorations.merge-incoming]
+background = "merge-incoming"
+whole_line = true
+
+[decorations.merge-current]
+background = "merge-current"
+whole_line = true
+
+[decorations.merge-incoming-accepted]
+background = "merge-incoming-header"
+whole_line = true
+
+[decorations.merge-current-accepted]
+background = "merge-current-header"
+whole_line = true
+
+[decorations.merge-both]
+background = "merge-current"
+whole_line = true
+
+[decorations.merge-unresolved]
+background = "merge-unresolved"
+whole_line = true
+
+[decorations.merge-manual]
+background = "diff-filler"
 whole_line = true

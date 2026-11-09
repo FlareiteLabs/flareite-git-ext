@@ -16,14 +16,18 @@
 mod blame;
 mod conflicts;
 mod diff;
+mod diff_view;
 mod graph;
 mod history;
+mod merge_ranges;
+mod merge_view;
 mod panel;
 mod progress;
 mod remote;
 mod repos;
 mod stash;
 mod status;
+mod text;
 mod timeline;
 
 use std::cell::RefCell;
@@ -151,6 +155,8 @@ enum Pending {
   Abort(progress::Progress),
   /// Whether to stage files that still have conflict markers.
   StageConflicts(Vec<String>),
+  /// Whether to complete a merge with conflicts unresolved (its tab's key).
+  CompleteMerge(String),
 }
 
 #[derive(Default)]
@@ -1211,11 +1217,9 @@ fn undo_commit() {
   ));
 }
 
-/// Shows changes in a diff tab.
+/// Shows changes in a diff tab (`diff_view`).
 fn open_diff(sides: diff::Sides) {
-  if let Err(problem) = documents::open_diff(&sides.original, &sides.modified, &sides.title) {
-    error(&format!("Showing the changes failed: {problem:?}"));
-  }
+  diff_view::open(sides);
 }
 
 /// The diff `sides` picks for a file's status entry, if it has one.
@@ -1486,27 +1490,14 @@ fn merge_editor_for(root: &str, path: &str) {
       .and_then(|status| status.branch.head.clone())
   });
   let marked = conflicts::has_conflicts(&current_text(path));
-  let name = relative.rsplit('/').next().unwrap_or(&relative).to_owned();
-  let options = documents::MergeOptions {
-    base: diff::address("~1", &relative),
-    incoming: documents::MergeSide {
-      uri: diff::address("~3", &relative),
-      title: "Incoming".into(),
-      description: incoming_name(in_progress),
-    },
-    current: documents::MergeSide {
-      uri: diff::address("~2", &relative),
-      title: "Current".into(),
-      description: current,
-    },
-    result_file: path.to_owned(),
-    title: format!("Merging: {name}"),
-    reset_result: marked,
-    on_complete: Some("flareite.git.mergeCompleted".into()),
-  };
-  if let Err(problem) = documents::open_merge(&options) {
-    error(&format!("Opening the merge editor failed: {problem:?}"));
-  }
+  merge_view::open(
+    root,
+    path,
+    &relative,
+    marked,
+    incoming_name(in_progress),
+    current,
+  );
 }
 
 /// Opens conflicted files from the Changes view: in the merge editor if
@@ -1524,15 +1515,12 @@ fn open_conflicts(paths: Vec<String>) {
   }
 }
 
-/// The merge editor's result was saved: it's resolved, so it's staged.
-fn merge_completed() {
-  let Some(path) = workbench::command_argument() else {
+/// Stages a file whose merge was completed in the merge editor.
+fn stage_merged(path: &str) {
+  let Some(repo) = repos::repo_of(path) else {
     return;
   };
-  let Some(repo) = repos::repo_of(&path) else {
-    return;
-  };
-  if let Some(relative) = relative_path(&repo.root, &path) {
+  if let Some(relative) = relative_path(&repo.root, path) {
     let mut staging = operation(
       "Staging",
       with_paths(&["add", "-A"], &[relative]),
@@ -1899,6 +1887,7 @@ fn answered() {
     (Pending::Stash(ask), value) => stash::answered(ask, value),
     (Pending::Abort(what), AnswerValue::Button(0)) => progress::do_abort(what),
     (Pending::StageConflicts(paths), AnswerValue::Button(0)) => stage_now(paths),
+    (Pending::CompleteMerge(key), AnswerValue::Button(0)) => merge_view::finish(&key),
     _ => {}
   }
 }
@@ -2003,6 +1992,18 @@ fn initialize() {
   });
 }
 
+/// Moves to the next change of the diff tab in use, or the next conflict
+/// of the merge tab in use (F7), or the ones before (Shift+F7).
+fn go_to_change(backward: bool) {
+  let clicked = flareite_extension_api::layouts::invoked().map(|from| from.tab.layout);
+  let in_use = flareite_extension_api::layouts::active_pane().map(|active| active.tab.layout);
+  match clicked.or(in_use).as_deref() {
+    Some(merge_view::LAYOUT) => merge_view::go_to_conflict(backward),
+    Some(diff_view::LAYOUT) => diff_view::go_to_change(backward),
+    _ => {}
+  }
+}
+
 struct Git;
 
 impl Guest for Git {
@@ -2094,7 +2095,20 @@ impl Guest for Git {
       "compareConflict" => compare_conflict(&context),
       "openMergeEditor" => open_merge_editor(&context),
       "openConflict" => open_conflicts(chosen()),
-      "mergeCompleted" => merge_completed(),
+      "diffLayout" => diff_view::fill(),
+      "mergeLayout" => merge_view::fill(),
+      "nextChange" => go_to_change(false),
+      "previousChange" => go_to_change(true),
+      "diffReveal" => diff_view::reveal(),
+      "diffToggleInline" => diff_view::toggle("diff_inline"),
+      "diffToggleWhitespace" => diff_view::toggle("diff_ignore_whitespace"),
+      "diffToggleUnchanged" => diff_view::toggle("diff_collapse_unchanged"),
+      "diffStageSelected" => diff_view::stage_selected(),
+      "diffRevertSelected" => diff_view::revert_selected(),
+      "diffOpenFile" => diff_view::open_file(),
+      "mergeAccept" => merge_view::accept(),
+      "mergeComplete" => merge_view::complete(),
+      "mergeOpenFile" => merge_view::open_file(),
       "continueOperation" => progress::continue_operation(),
       "abortOperation" => progress::abort(),
       "skipRebase" => progress::skip(),
@@ -2155,6 +2169,8 @@ impl Guest for Git {
   fn document_changed(change: DocumentChange) {
     conflicts::changed(&change);
     blame::changed(change.document);
+    diff_view::changed(change.document);
+    merge_view::changed(change.document);
   }
 
   fn document_closed(document: DocumentId) {
