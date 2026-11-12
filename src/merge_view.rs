@@ -1,6 +1,6 @@
 //! The merge editor: a conflicted file's incoming and current versions
 //! above the result (the file), as VS Code's, as the editor's `merge`
-//! layout of this extension (API 1.15).
+//! layout of this extension.
 //!
 //! A tab's key is the result's absolute path. The versions are the index
 //! stages (`git:~3:` incoming, `git:~2:` current, `git:~1:` their base,
@@ -19,11 +19,12 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use flareite_extension_api::layouts::{
-  self, Button, Decorated, Direction, EditorPane, FillReason, Layout, LayoutNode, LayoutTab,
-  NodeKind, Pane, PaneContent, PaneDecorations, PaneHeader, Zone, ZoneContent, ZoneLink, ZoneLinks,
+  self, Button, Decorated, Direction, EditorPane, FillReason, FillRequest, Layout, LayoutNode,
+  LayoutTab, NodeKind, Pane, PaneContent, PaneDecorations, PaneHeader, Zone, ZoneContent, ZoneLink,
+  ZoneLinks,
 };
-use flareite_extension_api::types::{LogLevel, Position, Range as ApiRange};
-use flareite_extension_api::{documents, host, workbench};
+use flareite_extension_api::types::{CommandContext, LogLevel, Position, Range as ApiRange};
+use flareite_extension_api::{documents, host};
 
 use crate::merge_ranges::{
   self, MergeRange, MergeTexts, RangeState, ResultEdit, ResultRange, Side,
@@ -119,10 +120,7 @@ pub fn open(
 }
 
 /// The layout's command: fills a tab in, or hears that it changed.
-pub fn fill() {
-  let Some(request) = layouts::filling() else {
-    return;
-  };
+pub fn fill(request: FillRequest) {
   let key = request.tab.key;
   match request.reason {
     FillReason::Opened | FillReason::Restored => {
@@ -754,7 +752,7 @@ fn reset_result(key: &str) {
 
 /// The merge tab a command is for: the clicked one's, else the one in use;
 /// and the result's cursor line, if the result is the pane in use.
-fn tab_in_use() -> Option<(String, Option<usize>)> {
+fn tab_in_use(context: &CommandContext) -> Option<(String, Option<usize>)> {
   let active = layouts::active_pane().filter(|active| active.tab.layout == LAYOUT);
   let line = |key: &str| {
     active
@@ -763,7 +761,11 @@ fn tab_in_use() -> Option<(String, Option<usize>)> {
       .and_then(|active| active.selections.first())
       .map(|range| range.start.line as usize)
   };
-  if let Some(from) = layouts::invoked().filter(|from| from.tab.layout == LAYOUT) {
+  if let Some(from) = context
+    .invoked_from
+    .clone()
+    .filter(|from| from.tab.layout == LAYOUT)
+  {
     let at = line(&from.tab.key);
     return Some((from.tab.key, at));
   }
@@ -774,8 +776,8 @@ fn tab_in_use() -> Option<(String, Option<usize>)> {
 
 /// Moves to the next unresolved conflict after the result's cursor (or the
 /// one before it), wrapping around; when all are resolved, between them all.
-pub fn go_to_conflict(backward: bool) {
-  let Some((key, line)) = tab_in_use() else {
+pub fn go_to_conflict(context: &CommandContext, backward: bool) {
+  let Some((key, line)) = tab_in_use(context) else {
     return;
   };
   let line = line.unwrap_or(0);
@@ -822,10 +824,13 @@ pub fn go_to_conflict(backward: bool) {
 
 /// Makes a range of the result what a link chose (`<range>:<state>:<the
 /// result's version>`), if the result hasn't changed since.
-pub fn accept() {
+pub fn accept(context: &CommandContext) {
   let (Some(from), Some(argument)) = (
-    layouts::invoked().filter(|from| from.tab.layout == LAYOUT),
-    workbench::command_argument(),
+    context
+      .invoked_from
+      .as_ref()
+      .filter(|from| from.tab.layout == LAYOUT),
+    context.argument.as_deref(),
   ) else {
     return;
   };
@@ -837,7 +842,7 @@ pub fn accept() {
   ) else {
     return;
   };
-  let key = from.tab.key;
+  let key = from.tab.key.clone();
   let Some(documents) = TABS.with_borrow(|tabs| tabs.get(&key)?.documents) else {
     return;
   };
@@ -864,8 +869,8 @@ pub fn accept() {
 }
 
 /// Complete Merge: asks first while conflicts are unresolved.
-pub fn complete() {
-  let Some((key, _)) = tab_in_use() else {
+pub fn complete(context: &CommandContext) {
+  let Some((key, _)) = tab_in_use(context) else {
     return;
   };
   let remaining = TABS.with_borrow(|tabs| tabs.get(&key).map_or(0, |tab| tab.counts.0));
@@ -901,8 +906,8 @@ pub fn finish(key: &str) {
 }
 
 /// Opens the result file by itself.
-pub fn open_file() {
-  if let Some((key, _)) = tab_in_use()
+pub fn open_file(context: &CommandContext) {
+  if let Some((key, _)) = tab_in_use(context)
     && let Err(problem) = flareite_extension_api::workspace::open_file(&key)
   {
     crate::error(&format!("Opening the file failed: {problem:?}"));

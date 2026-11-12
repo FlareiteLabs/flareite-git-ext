@@ -4,11 +4,13 @@
 
 use flareite_extension_api::prompts::{self, AnswerValue, InputOptions};
 use flareite_extension_api::types::LogLevel;
-use flareite_extension_api::views::{self, Expansion, ItemIcon, TreeItem, Welcome, WelcomeButton};
+use flareite_extension_api::views::{
+  self, ExpandingItem, Expansion, ItemIcon, TreeItem, Welcome, WelcomeButton,
+};
 
 use crate::{
-  ANSWERED, Pending, Then, args, ask_confirm, commit_changes, error, info, log, operate, operation,
-  panel, repository, run_git, with_state,
+  Pending, Then, args, ask_confirm, commit_changes, error, info, log, operate, operation, panel,
+  repository, run_git, with_state,
 };
 
 pub const STASHES: &str = "stashes";
@@ -96,10 +98,7 @@ pub fn load() {
 }
 
 /// The files a stash changed, when it's opened.
-pub fn expand() {
-  let Some(expanding) = views::expanding() else {
-    return;
-  };
+pub fn expand(expanding: ExpandingItem) {
   let Some((root, _)) = repository() else {
     return;
   };
@@ -128,7 +127,7 @@ pub fn stash(options: Vec<&'static str>) {
     value: String::new(),
     placeholder: Some("Optional: what the changes are".into()),
   };
-  match prompts::input(&input, ANSWERED) {
+  match prompts::input(&input) {
     Ok(id) => with_state(|state| {
       state
         .prompts

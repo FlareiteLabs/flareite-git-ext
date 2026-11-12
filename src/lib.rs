@@ -34,23 +34,26 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use flareite_extension_api::documents;
+use flareite_extension_api::events::Event;
 use flareite_extension_api::explorer;
-use flareite_extension_api::processes::{self, ProcessError, ProcessOptions, ProcessOutput};
-use flareite_extension_api::prompts::{self, AnswerValue, ConfirmOptions, InputOptions};
-use flareite_extension_api::quick_diff;
-use flareite_extension_api::types::{
-  Activation, CommandContext, ConfigValue, DocumentChange, DocumentId, DocumentInfo, LogLevel,
-  MessageLevel, PreviewElement, PreviewNode, PreviewOptions,
+use flareite_extension_api::processes::{
+  self, FinishedProcess, ProcessError, ProcessOptions, ProcessOutput,
 };
-use flareite_extension_api::views::{self, Welcome, WelcomeButton};
-use flareite_extension_api::{Guest, export_extension, files, host, workbench, workspace};
+use flareite_extension_api::prompts::{
+  self, AnswerValue, ConfirmOptions, InputOptions, PromptAnswer,
+};
+use flareite_extension_api::quick_diff::{self, Applied};
+use flareite_extension_api::types::{
+  Activation, CommandContext, ConfigValue, DocumentId, LogLevel, MessageLevel, PreviewElement,
+  PreviewNode, PreviewOptions,
+};
+use flareite_extension_api::views::{self, ExpandingItem, Welcome, WelcomeButton};
+use flareite_extension_api::workspace::FileChanges;
+use flareite_extension_api::{Extension, files, host, register, workbench, workspace};
 
 use crate::history::{Commit, DETAILS_FORMAT, FileChange, LOG_FORMAT};
 use crate::status::{Kind, Status, branch_text, branch_tooltip};
 
-const JOB_FINISHED: &str = "flareite.git.jobFinished";
-const FILES_CHANGED: &str = "flareite.git.filesChanged";
-const ANSWERED: &str = "flareite.git.answered";
 /// The Source Control container's views.
 const CHANGES: &str = "changes";
 const COMMITS: &str = "commits";
@@ -517,7 +520,7 @@ fn set_changes_flags() {
 }
 
 fn watch(path: &str) {
-  match workspace::watch(path, FILES_CHANGED) {
+  match workspace::watch(path) {
     Ok(id) => with_state(|state| state.watches.push(id)),
     Err(error) => log(LogLevel::Warn, &format!("can't watch {path}: {error:?}")),
   }
@@ -562,7 +565,7 @@ fn spawn(job: Job, args: &[String], cwd: &str, stdin: Option<Vec<u8>>) -> bool {
   let mut options = options(cwd);
   options.stdin = stdin;
   log_command(args);
-  match processes::spawn("git", args, &options, JOB_FINISHED) {
+  match processes::spawn("git", args, &options) {
     Ok(id) => {
       with_state(|state| state.jobs.insert(id, job));
       true
@@ -586,10 +589,7 @@ fn refresh() {
 }
 
 /// A program ended: handles it for its job.
-fn job_finished() {
-  let Some(finished) = processes::finished() else {
-    return;
-  };
+fn job_finished(finished: FinishedProcess) {
   let Some(job) = with_state(|state| state.jobs.remove(&finished.process)) else {
     return;
   };
@@ -865,12 +865,11 @@ fn with_paths(command: &[&str], paths: &[String]) -> Vec<String> {
 }
 
 /// The items a view command is for: the selected ones, or the argument.
-fn chosen() -> Vec<String> {
-  let selection = views::selection();
-  if selection.is_empty() {
-    workbench::command_argument().into_iter().collect()
+fn chosen(context: &CommandContext) -> Vec<String> {
+  if context.selection.is_empty() {
+    context.argument.clone().into_iter().collect()
   } else {
-    selection
+    context.selection.clone()
   }
 }
 
@@ -1061,7 +1060,7 @@ fn ask_confirm(message: &str, detail: &str, buttons: &[&str], destructive: bool,
     buttons: buttons.iter().map(|button| (*button).to_owned()).collect(),
     destructive,
   };
-  match prompts::confirm(&confirm, ANSWERED) {
+  match prompts::confirm(&confirm) {
     Ok(id) => with_state(|state| {
       state.prompts.insert(id, pending);
     }),
@@ -1119,7 +1118,7 @@ fn commit(kind: CommitKind) {
       value: String::new(),
       placeholder: Some("What the commit does".into()),
     };
-    match prompts::input(&input, ANSWERED) {
+    match prompts::input(&input) {
       Ok(id) => with_state(|state| {
         state.prompts.insert(id, Pending::Message(kind));
       }),
@@ -1319,7 +1318,7 @@ fn open_commit_files(files: Vec<String>) {
 /// "Open Changes" for a file (the explorer's, as an absolute path) or the
 /// active document: its changes not staged, else its staged ones.
 fn open_file_changes(context: &CommandContext) {
-  let path = workbench::command_argument().or_else(|| {
+  let path = context.argument.clone().or_else(|| {
     let document = host::document(context.document?).ok()?;
     document.path
   });
@@ -1348,11 +1347,8 @@ fn open_file_changes(context: &CommandContext) {
 
 /// Provides the text at a `git:` address (see `diff.rs`); a version that
 /// doesn't exist is empty.
-fn provide() {
-  let Some(uri) = documents::requested() else {
-    return;
-  };
-  let text = diff::parse(&uri).and_then(|(revision, address_path)| {
+fn provide(uri: &str) -> Option<String> {
+  diff::parse(uri).and_then(|(revision, address_path)| {
     if revision == diff::EMPTY {
       return Some(String::new());
     }
@@ -1377,10 +1373,7 @@ fn provide() {
       _ if stage.is_some() => Some(String::new()),
       _ => None,
     }
-  });
-  if let Err(problem) = documents::provide(&uri, text.as_deref()) {
-    log(LogLevel::Warn, &format!("can't provide {uri}: {problem:?}"));
-  }
+  })
 }
 
 /// A file's text as it's being edited: its open document's, or else what's
@@ -1402,7 +1395,7 @@ fn current_text(path: &str) -> String {
 /// document's, or a path chosen in a view.
 fn conflict_file(context: &CommandContext) -> Option<String> {
   let (root, _) = repository()?;
-  let argument = workbench::command_argument();
+  let argument = context.argument.clone();
   let from_document = || host::document(context.document?).ok()?.path;
   let path = match argument {
     // A code lens's argument is its line.
@@ -1558,13 +1551,10 @@ fn relative_path(root: &str, path: &str) -> Option<String> {
 
 /// Names a file's original for change markers: its version in the index,
 /// if Git tracks it.
-fn original() {
-  let Some(path) = quick_diff::requested_file() else {
-    return;
-  };
-  let uri = repos::repo_of(&path).and_then(|repo| {
+fn original(path: &str) -> Option<String> {
+  repos::repo_of(path).and_then(|repo| {
     let root = repo.root;
-    let relative = relative_path(&root, &path).filter(|relative| !relative.is_empty())?;
+    let relative = relative_path(&root, path).filter(|relative| !relative.is_empty())?;
     let tracked = run_git(
       &with_paths(
         &["ls-files", "--error-unmatch"],
@@ -1574,26 +1564,17 @@ fn original() {
     );
     matches!(tracked, Ok(output) if output.exit_code == Some(0))
       .then(|| repos::address_in(&root, "", &relative))
-  });
-  if let Err(problem) = quick_diff::set_original(&path, uri.as_deref()) {
-    log(
-      LogLevel::Warn,
-      &format!("can't name {path}'s original: {problem:?}"),
-    );
-  }
+  })
 }
 
 /// Stages changes the editor chose: makes the index version of a file the
 /// text it gives (its index version with those changes made).
-fn stage_changes() {
-  let Some(applied) = quick_diff::to_apply() else {
-    return;
-  };
+fn stage_changes(applied: Applied) -> Result<(), String> {
   let Some(("", address_path)) = diff::parse(&applied.uri) else {
-    return error("Only changes to the index can be staged.");
+    return Err("Only changes to the index can be staged.".into());
   };
   let Some((root, path)) = repos::resolve(address_path) else {
-    return;
+    return Err(format!("{} isn't in a repository.", applied.uri));
   };
   let path = path.as_str();
   let run = |command: &[&str], stdin: Option<Vec<u8>>| -> Result<String, String> {
@@ -1633,8 +1614,9 @@ fn stage_changes() {
     Ok(_) => {
       versions_changed();
       repos::refresh(&root);
+      Ok(())
     }
-    Err(message) => error(&format!("Staging failed: {message}")),
+    Err(message) => Err(format!("Staging failed: {message}")),
   }
 }
 
@@ -1693,10 +1675,7 @@ fn open(paths: Vec<String>) {
 }
 
 /// The files a commit changed, for its item in the Commits view.
-fn expand_commit() {
-  let Some(expanding) = views::expanding() else {
-    return;
-  };
+fn expand_commit(expanding: ExpandingItem) {
   let Some((root, _)) = repository() else {
     return;
   };
@@ -1857,10 +1836,7 @@ fn commit_details(hash: &str) {
 }
 
 /// The user answered one of the extension's prompts.
-fn answered() {
-  let Some(answer) = prompts::answer() else {
-    return;
-  };
+fn answered(answer: PromptAnswer) {
   let Some(pending) = with_state(|state| state.prompts.remove(&answer.prompt)) else {
     return;
   };
@@ -1931,10 +1907,7 @@ fn matters(path: &str, git_dir: &str) -> bool {
 }
 
 /// Watched files changed.
-fn files_changed() {
-  let Some(changes) = workspace::changes() else {
-    return;
-  };
+fn files_changed(changes: FileChanges) {
   // A repository appeared (`git init`, a clone): look again.
   if changes.paths.iter().any(|path| repos::appeared(path)) || (changes.overflow && !repos::any()) {
     return start();
@@ -1994,41 +1967,40 @@ fn initialize() {
 
 /// Moves to the next change of the diff tab in use, or the next conflict
 /// of the merge tab in use (F7), or the ones before (Shift+F7).
-fn go_to_change(backward: bool) {
-  let clicked = flareite_extension_api::layouts::invoked().map(|from| from.tab.layout);
+fn go_to_change(context: &CommandContext, backward: bool) {
+  let clicked = context
+    .invoked_from
+    .as_ref()
+    .map(|from| from.tab.layout.clone());
   let in_use = flareite_extension_api::layouts::active_pane().map(|active| active.tab.layout);
   match clicked.or(in_use).as_deref() {
-    Some(merge_view::LAYOUT) => merge_view::go_to_conflict(backward),
-    Some(diff_view::LAYOUT) => diff_view::go_to_change(backward),
+    Some(merge_view::LAYOUT) => merge_view::go_to_conflict(context, backward),
+    Some(diff_view::LAYOUT) => diff_view::go_to_change(context, backward),
     _ => {}
   }
 }
 
+/// The extension. Its state is in [`STATE`] (and the diff and merge tabs'
+/// in theirs), which the functions above share.
 struct Git;
 
-impl Guest for Git {
-  fn activate(_: Activation) -> Result<(), String> {
+impl Extension for Git {
+  fn activate(_: Activation) -> Result<Self, String> {
     start();
-    Ok(())
+    Ok(Git)
   }
 
-  fn deactivate() {}
-
-  fn run_command(command: String, context: CommandContext) -> Result<(), String> {
+  fn run_command(&mut self, command: &str, context: CommandContext) -> Result<(), String> {
     match command.trim_start_matches("flareite.git.") {
-      "refresh" | "folderChanged" => start(),
-      "jobFinished" => job_finished(),
-      "filesChanged" => files_changed(),
-      "answered" => answered(),
+      "refresh" => start(),
       "trust" => workspace::request_trust(),
       "init" => initialize(),
-      "open" => open(chosen()),
-      "openChange" => open_changes(chosen()),
-      "openStagedChange" => open_staged_changes(chosen()),
-      "openCommitChange" => open_commit_changes(chosen()),
-      "openCommitFile" => open_commit_files(chosen()),
+      "open" => open(chosen(&context)),
+      "openChange" => open_changes(chosen(&context)),
+      "openStagedChange" => open_staged_changes(chosen(&context)),
+      "openCommitChange" => open_commit_changes(chosen(&context)),
+      "openCommitFile" => open_commit_files(chosen(&context)),
       "openFileChanges" => open_file_changes(&context),
-      "provide" => provide(),
       "checkout" => remote::checkout(),
       "createBranch" => remote::create_branch(),
       "createBranchFrom" => remote::create_branch_from(),
@@ -2045,45 +2017,36 @@ impl Guest for Git {
       "sync" => remote::sync(),
       "addRemote" => remote::add_remote(),
       "removeRemote" => remote::remove_remote(),
-      "autofetch" => remote::autofetch(),
-      "activeFileChanged" => {
-        if let Some(path) = workbench::active_file() {
-          repos::follow(&path);
-        }
-        timeline::load();
-      }
-      "selectionChanged" => blame::selection_changed(&context),
       "blameDetails" => {
         if let Some(hash) = with_state(|state| state.blame.hash.clone()) {
           commit_details(&hash);
         }
       }
       "selectRepository" => {
-        if let Some(root) = workbench::command_argument() {
-          repos::select(&root);
+        if let Some(root) = &context.argument {
+          repos::select(root);
         }
       }
-      "expandStash" => stash::expand(),
       "stash" => stash::stash(Vec::new()),
       "stashIncludeUntracked" => stash::stash(vec!["--include-untracked"]),
       "stashStaged" => stash::stash(vec!["--staged"]),
-      "stashApply" => stash::apply(&chosen(), false),
-      "stashPop" => stash::apply(&chosen(), true),
-      "stashDrop" => stash::drop(&chosen()),
+      "stashApply" => stash::apply(&chosen(&context), false),
+      "stashPop" => stash::apply(&chosen(&context), true),
+      "stashDrop" => stash::drop(&chosen(&context)),
       "stashApplyLatest" if stash::has_stashes() => stash::apply(&[], false),
       "stashPopLatest" if stash::has_stashes() => stash::apply(&[], true),
       "stashApplyLatest" | "stashPopLatest" => {}
       "stashDropAll" => stash::drop_all(),
       "createTag" => remote::create_tag(None),
-      "createTagAt" => remote::create_tag(chosen().into_iter().next()),
+      "createTagAt" => remote::create_tag(chosen(&context).into_iter().next()),
       "deleteTag" => remote::delete_tag(),
       "pushTags" => remote::push_tags(),
-      "cherryPick" => remote::cherry_pick(&chosen()),
-      "revertCommit" => remote::revert_commit(&chosen()),
-      "checkoutCommit" => remote::checkout_commit(&chosen()),
-      "branchAt" => remote::branch_at(&chosen()),
+      "cherryPick" => remote::cherry_pick(&chosen(&context)),
+      "revertCommit" => remote::revert_commit(&chosen(&context)),
+      "checkoutCommit" => remote::checkout_commit(&chosen(&context)),
+      "branchAt" => remote::branch_at(&chosen(&context)),
       "clone" => remote::clone(),
-      "addToGitignore" => add_to_gitignore(chosen()),
+      "addToGitignore" => add_to_gitignore(chosen(&context)),
       "acceptCurrent" => conflicts::accept(&context, conflicts::Choice::Current),
       "acceptIncoming" => conflicts::accept(&context, conflicts::Choice::Incoming),
       "acceptBoth" => conflicts::accept(&context, conflicts::Choice::Both),
@@ -2094,35 +2057,31 @@ impl Guest for Git {
       "previousConflict" => conflicts::go_to(&context, true),
       "compareConflict" => compare_conflict(&context),
       "openMergeEditor" => open_merge_editor(&context),
-      "openConflict" => open_conflicts(chosen()),
-      "diffLayout" => diff_view::fill(),
-      "mergeLayout" => merge_view::fill(),
-      "nextChange" => go_to_change(false),
-      "previousChange" => go_to_change(true),
-      "diffReveal" => diff_view::reveal(),
+      "openConflict" => open_conflicts(chosen(&context)),
+      "nextChange" => go_to_change(&context, false),
+      "previousChange" => go_to_change(&context, true),
+      "diffReveal" => diff_view::reveal(&context),
       "diffToggleInline" => diff_view::toggle("diff_inline"),
       "diffToggleWhitespace" => diff_view::toggle("diff_ignore_whitespace"),
       "diffToggleUnchanged" => diff_view::toggle("diff_collapse_unchanged"),
       "diffStageSelected" => diff_view::stage_selected(),
-      "diffRevertSelected" => diff_view::revert_selected(),
-      "diffOpenFile" => diff_view::open_file(),
-      "mergeAccept" => merge_view::accept(),
-      "mergeComplete" => merge_view::complete(),
-      "mergeOpenFile" => merge_view::open_file(),
+      "diffRevertSelected" => diff_view::revert_selected(&context),
+      "diffOpenFile" => diff_view::open_file(&context),
+      "mergeAccept" => merge_view::accept(&context),
+      "mergeComplete" => merge_view::complete(&context),
+      "mergeOpenFile" => merge_view::open_file(&context),
       "continueOperation" => progress::continue_operation(),
       "abortOperation" => progress::abort(),
       "skipRebase" => progress::skip(),
       "rebaseBranch" => remote::rebase_branch(),
-      "original" => original(),
-      "stageChanges" => stage_changes(),
       "stageSelectedRanges" => {
         if let Err(problem) = quick_diff::apply_selected_ranges() {
           error(&format!("Staging failed: {problem:?}"));
         }
       }
-      "stage" => stage(chosen()),
-      "unstage" => unstage(chosen()),
-      "discard" => discard(chosen()),
+      "stage" => stage(chosen(&context)),
+      "unstage" => unstage(chosen(&context)),
+      "discard" => discard(chosen(&context)),
       "stageAll" => operate(operation("Staging", args(&["add", "-A"]), Then::Nothing)),
       "unstageAll" if has_head() => {
         operate(operation(
@@ -2147,13 +2106,12 @@ impl Guest for Git {
       "undoCommit" => undo_commit(),
       "viewAsTree" => set_tree_view(true),
       "viewAsList" => set_tree_view(false),
-      "expandCommit" => expand_commit(),
       "loadMore" => {
         let loaded = with_state(|state| state.commits.len());
         load_commits(loaded);
       }
       "commitDetails" => {
-        for hash in chosen().iter().take(5) {
+        for hash in chosen(&context).iter().take(5) {
           commit_details(hash);
         }
       }
@@ -2162,24 +2120,63 @@ impl Guest for Git {
     Ok(())
   }
 
-  fn document_opened(document: DocumentInfo) {
-    conflicts::opened(&document);
+  fn handle_event(&mut self, event: Event) -> Result<(), String> {
+    match event {
+      Event::DocumentOpened(document) => conflicts::opened(&document),
+      Event::DocumentChanged(change) => {
+        conflicts::changed(&change);
+        blame::changed(change.document);
+        diff_view::changed(change.document);
+        merge_view::changed(change.document);
+      }
+      Event::DocumentClosed(document) => {
+        conflicts::closed(document);
+        blame::closed(document);
+      }
+      Event::FolderChanged => start(),
+      Event::ActiveFileChanged(path) => {
+        if let Some(path) = path {
+          repos::follow(&path);
+        }
+        timeline::load();
+      }
+      Event::SelectionChanged(change) => blame::selection_changed(&change),
+      Event::ProcessFinished(finished) => job_finished(finished),
+      Event::FilesChanged(changes) => files_changed(changes),
+      Event::PromptAnswered(answer) => answered(answer),
+      Event::TimerFired(timer) => remote::autofetch(timer),
+      Event::ViewItemExpanding(expanding) => match expanding.view.as_str() {
+        COMMITS => expand_commit(expanding),
+        stash::STASHES => stash::expand(expanding),
+        _ => {}
+      },
+      Event::LayoutFill(request) => match request.tab.layout.as_str() {
+        diff_view::LAYOUT => diff_view::fill(request),
+        merge_view::LAYOUT => merge_view::fill(request),
+        _ => {}
+      },
+      _ => {}
+    }
+    Ok(())
   }
 
-  fn document_changed(change: DocumentChange) {
-    conflicts::changed(&change);
-    blame::changed(change.document);
-    diff_view::changed(change.document);
-    merge_view::changed(change.document);
+  /// A version of a file at a `git:` address, for diff tabs.
+  fn provide_text(&mut self, uri: &str) -> Result<Option<String>, String> {
+    Ok(provide(uri))
   }
 
-  fn document_closed(document: DocumentId) {
-    conflicts::closed(document);
-    blame::closed(document);
+  /// A file's original for change markers: its version in the index.
+  fn provide_original(&mut self, path: &str) -> Result<Option<String>, String> {
+    Ok(original(path))
+  }
+
+  /// Stages the changes the editor chose (quick diff's Stage).
+  fn change_original(&mut self, applied: Applied) -> Result<(), String> {
+    stage_changes(applied)
   }
 }
 
-export_extension!(Git);
+register!(Git);
 
 #[cfg(test)]
 mod tests {

@@ -11,9 +11,10 @@
 
 use std::collections::HashMap;
 
+use flareite_extension_api::events::SelectionChange;
 use flareite_extension_api::host;
 use flareite_extension_api::processes::{ProcessError, ProcessOutput};
-use flareite_extension_api::types::{CommandContext, ConfigValue, DocumentId, StatusItem};
+use flareite_extension_api::types::{ConfigValue, DocumentId, StatusItem};
 use flareite_extension_api::workbench::{self, LineAnnotation};
 
 use crate::{Job, args, options, relative_path, run_git, spawn, with_state};
@@ -175,9 +176,9 @@ fn enabled(key: &str) -> bool {
 }
 
 /// The cursor moved to another line, or another document is in use.
-pub fn selection_changed(context: &CommandContext) {
-  let cursor = context.document.and_then(|document| {
-    let line = context.selections.first()?.start.line as usize;
+pub fn selection_changed(change: &SelectionChange) {
+  let cursor = change.document.and_then(|document| {
+    let line = change.selections.first()?.start.line as usize;
     Some((document, line))
   });
   with_state(|state| state.blame.cursor = cursor);

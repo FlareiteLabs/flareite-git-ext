@@ -1,5 +1,5 @@
 //! Diff tabs: two versions of a file compared, as the editor's `diff`
-//! layout of this extension (API 1.15).
+//! layout of this extension.
 //!
 //! A tab's key names its sides (`[original, modified, title]`), each a
 //! file's absolute path or a `git:` address. Side by side, each side is an
@@ -18,11 +18,13 @@ use std::ops::Range;
 
 use flareite_diff::{DiffError, DiffOptions, LineChange};
 use flareite_extension_api::layouts::{
-  self, Button, Decorated, Direction, EditorPane, FillReason, Layout, LayoutNode, LayoutTab,
-  LineRange, NodeKind, Pane, PaneContent, PaneDecorations, RulerMark, Zone, ZoneContent, ZoneLines,
-  ZoneText,
+  self, Button, Decorated, Direction, EditorPane, FillReason, FillRequest, Layout, LayoutNode,
+  LayoutTab, LineRange, NodeKind, Pane, PaneContent, PaneDecorations, RulerMark, Zone, ZoneContent,
+  ZoneLines, ZoneText,
 };
-use flareite_extension_api::types::{ConfigValue, LogLevel, Position, Range as ApiRange};
+use flareite_extension_api::types::{
+  CommandContext, ConfigValue, LogLevel, Position, Range as ApiRange,
+};
 use flareite_extension_api::{documents, host, quick_diff, workspace};
 
 use crate::diff::Sides;
@@ -100,10 +102,7 @@ pub fn open(sides: Sides) {
 }
 
 /// The layout's command: fills a tab in, or hears that it changed.
-pub fn fill() {
-  let Some(request) = layouts::filling() else {
-    return;
-  };
+pub fn fill(request: FillRequest) {
   let key = request.tab.key;
   match request.reason {
     FillReason::Opened | FillReason::Restored | FillReason::Resized => {
@@ -594,9 +593,13 @@ fn panes(tab: &Tab, before: &str, after: &str) -> Vec<(&'static str, PaneDecorat
 }
 
 /// The diff tab a command is for: the clicked one's, else the one in use.
-fn tab_in_use() -> Option<(String, Option<String>, Vec<ApiRange>)> {
+fn tab_in_use(context: &CommandContext) -> Option<(String, Option<String>, Vec<ApiRange>)> {
   let active = layouts::active_pane().filter(|active| active.tab.layout == LAYOUT);
-  if let Some(from) = layouts::invoked().filter(|from| from.tab.layout == LAYOUT) {
+  if let Some(from) = context
+    .invoked_from
+    .clone()
+    .filter(|from| from.tab.layout == LAYOUT)
+  {
     let selections = active
       .filter(|active| active.tab.key == from.tab.key)
       .map(|active| (Some(active.pane), active.selections))
@@ -608,8 +611,8 @@ fn tab_in_use() -> Option<(String, Option<String>, Vec<ApiRange>)> {
 
 /// Moves to a diff tab's next change after the cursor (or the one before
 /// it), wrapping around.
-pub fn go_to_change(backward: bool) {
-  let Some((key, pane, selections)) = tab_in_use() else {
+pub fn go_to_change(context: &CommandContext, backward: bool) {
+  let Some((key, pane, selections)) = tab_in_use(context) else {
     return;
   };
   let pane = pane.unwrap_or_else(|| MODIFIED.into());
@@ -650,10 +653,13 @@ pub fn go_to_change(backward: bool) {
 }
 
 /// Shows an unchanged stretch the user clicked.
-pub fn reveal() {
+pub fn reveal(context: &CommandContext) {
   let (Some(from), Some(region)) = (
-    layouts::invoked().filter(|from| from.tab.layout == LAYOUT),
-    flareite_extension_api::workbench::command_argument().and_then(|key| key.parse().ok()),
+    context
+      .invoked_from
+      .as_ref()
+      .filter(|from| from.tab.layout == LAYOUT),
+    context.argument.as_deref().and_then(|key| key.parse().ok()),
   ) else {
     return;
   };
@@ -728,8 +734,8 @@ pub fn stage_selected() {
 
 /// Reverts the changes the selections in the tab's file touch, putting
 /// back the original's lines.
-pub fn revert_selected() {
-  let Some((key, pane, selections)) = tab_in_use() else {
+pub fn revert_selected(context: &CommandContext) {
+  let Some((key, pane, selections)) = tab_in_use(context) else {
     return;
   };
   if pane.as_deref() != Some(MODIFIED) || selections.is_empty() {
@@ -768,8 +774,8 @@ pub fn revert_selected() {
 }
 
 /// Opens the tab's modified side by itself.
-pub fn open_file() {
-  let Some((key, _, _)) = tab_in_use() else {
+pub fn open_file(context: &CommandContext) {
+  let Some((key, _, _)) = tab_in_use(context) else {
     return;
   };
   let Some(modified) = TABS.with_borrow(|tabs| Some(tabs.get(&key)?.sides.modified.clone())) else {

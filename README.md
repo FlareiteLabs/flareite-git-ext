@@ -155,7 +155,7 @@ below). Narrower than 900 pixels, a diff shows inline. In a diff of a file's cha
 **Stage Selected Ranges** and **Revert Selected Ranges** act on the lines you've selected in the
 file. A diff tab updates as you edit the file, stage, or commit.
 
-Diff tabs and the merge editor are this extension's own layouts (Flareite's extension API 1.15):
+Diff tabs and the merge editor are this extension's own layouts (Flareite's extension API):
 the comparing happens in the extension, which tells the editor what to draw.
 
 In a folder that isn't a repository, the view offers **Initialize Repository**. In a folder you

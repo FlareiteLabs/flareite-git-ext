@@ -353,7 +353,9 @@ fn replacement(lines: &[String], conflict: &Conflict, choice: Choice) -> TextEdi
 /// cursor's.
 fn target(context: &CommandContext) -> Option<(DocumentId, usize)> {
   let id = context.document?;
-  let line = workbench::command_argument()
+  let line = context
+    .argument
+    .as_deref()
     .and_then(|argument| argument.parse().ok())
     .or_else(|| {
       context

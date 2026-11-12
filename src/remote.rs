@@ -14,12 +14,11 @@ use flareite_extension_api::{host, timers, workbench, workspace};
 
 use crate::status::{Branch, Status};
 use crate::{
-  ANSWERED, Job, Operation, Pending, Then, args, ask_confirm, error, info, log, operate, operation,
-  refresh, repository, run_git, setting, spawn, with_state,
+  Job, Operation, Pending, Then, args, ask_confirm, error, info, log, operate, operation, refresh,
+  repository, run_git, setting, spawn, with_state,
 };
 
 /// Run by the timer that fetches in the background.
-pub const AUTOFETCH: &str = "flareite.git.autofetch";
 /// Remembers that fetching in the background was offered.
 const AUTOFETCH_OFFERED: &str = "autofetchOffered";
 /// Most refs the branch picker lists (the prompt takes 1,000 items).
@@ -136,7 +135,7 @@ pub enum Ask {
 }
 
 fn ask_pick(title: &str, items: Vec<PickItem>, ask: Ask) {
-  match prompts::pick(title, &items, ANSWERED) {
+  match prompts::pick(title, &items) {
     Ok(id) => with_state(|state| {
       state.prompts.insert(id, Pending::Remote(ask));
     }),
@@ -150,7 +149,7 @@ fn ask_input(title: &str, value: &str, placeholder: Option<String>, ask: Ask) {
     value: value.into(),
     placeholder,
   };
-  match prompts::input(&input, ANSWERED) {
+  match prompts::input(&input) {
     Ok(id) => with_state(|state| {
       state.prompts.insert(id, Pending::Remote(ask));
     }),
@@ -749,7 +748,7 @@ pub fn answered(ask: Ask, value: AnswerValue) {
     )),
     (Ask::CloneUrl, AnswerValue::Text(url)) => {
       if let Some(url) = typed(&url) {
-        match prompts::pick_folder("Choose the folder to clone the repository into", ANSWERED) {
+        match prompts::pick_folder("Choose the folder to clone the repository into") {
           Ok(id) => with_state(|state| {
             state
               .prompts
@@ -846,7 +845,7 @@ pub fn schedule_autofetch() {
     _ => 180,
   };
   let delay = u32::try_from(seconds * 1_000).unwrap_or(180_000);
-  match timers::set_timer(delay, AUTOFETCH) {
+  match timers::set_timer(delay) {
     Ok(timer) => with_state(|state| state.autofetch_timer = Some(timer)),
     Err(problem) => log(
       LogLevel::Warn,
@@ -856,10 +855,7 @@ pub fn schedule_autofetch() {
 }
 
 /// The background fetch's timer ran out.
-pub fn autofetch() {
-  let Some(fired) = timers::fired() else {
-    return;
-  };
+pub fn autofetch(fired: u64) {
   if with_state(|state| state.autofetch_timer) != Some(fired) {
     return;
   }

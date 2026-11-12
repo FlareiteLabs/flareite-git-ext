@@ -1,16 +1,15 @@
 id = "flareite.git"
 name = "Git"
-version = "0.6.0"
+version = "1.0.0"
 description = "Source control with Git: stage, commit, and browse history; see changes side by side; file status in the explorer; the current branch."
 author = "Flareite"
 icon = "icon.svg"
-api_version = "1"
+api_version = "2"
 entrypoint = "target/wasm32-unknown-unknown/release/git.wasm"
 activation = ["on-startup"]
-on_folder_changed = "flareite.git.folderChanged"
-on_active_file_changed = "flareite.git.activeFileChanged"
-# The cursor's line, for blame.
-on_selection_changed = "flareite.git.selectionChanged"
+# The folder, the active file (its repository becomes the active one),
+# and the cursor's line, for blame.
+events = ["folder-changed", "active-file-changed", "selection-changed"]
 
 [engines]
 flareite = ">=0.1.0"
@@ -41,12 +40,9 @@ askpass = true
 # Versions of files in HEAD, the index, and commits, for diff tabs.
 [[text_providers]]
 scheme = "git"
-command = "flareite.git.provide"
 
 # Lines changed from the index, marked beside the text as it's edited.
 [quick_diff]
-original = "flareite.git.original"
-apply = "flareite.git.stageChanges"
 apply_title = "Stage"
 
 # The Source Control view: changes, with a commit message box, and commits.
@@ -73,13 +69,11 @@ input = { placeholder = "Message (Ctrl+Enter to commit)", command = "flareite.gi
 id = "commits"
 title = "Commits"
 container = "scm"
-on_expand = "flareite.git.expandCommit"
 
 [[views]]
 id = "stashes"
 title = "Stashes"
 container = "scm"
-on_expand = "flareite.git.expandStash"
 
 [[views]]
 id = "file-history"
@@ -255,11 +249,6 @@ title = "Drop Stash"
 hidden = true
 
 [[commands]]
-id = "flareite.git.expandStash"
-title = "List a Stash's Files"
-hidden = true
-
-[[commands]]
 id = "flareite.git.createTagAt"
 title = "Create Tag…"
 hidden = true
@@ -287,11 +276,6 @@ hidden = true
 [[commands]]
 id = "flareite.git.addToGitignore"
 title = "Add to .gitignore"
-hidden = true
-
-[[commands]]
-id = "flareite.git.activeFileChanged"
-title = "Active File Changed"
 hidden = true
 
 [[commands]]
@@ -366,31 +350,6 @@ hidden = true
 
 # Run by the editor, not the user.
 [[commands]]
-id = "flareite.git.folderChanged"
-title = "Open Folder Changed"
-hidden = true
-
-[[commands]]
-id = "flareite.git.filesChanged"
-title = "Files Changed"
-hidden = true
-
-[[commands]]
-id = "flareite.git.jobFinished"
-title = "Git Finished"
-hidden = true
-
-[[commands]]
-id = "flareite.git.answered"
-title = "Answered"
-hidden = true
-
-[[commands]]
-id = "flareite.git.provide"
-title = "Provide a Version"
-hidden = true
-
-[[commands]]
 id = "flareite.git.acceptCurrent"
 title = "Accept Current Change"
 
@@ -453,16 +412,6 @@ hidden = true
 
 # Diff and merge tabs (the layouts below).
 [[commands]]
-id = "flareite.git.diffLayout"
-title = "Show a Diff Tab"
-hidden = true
-
-[[commands]]
-id = "flareite.git.mergeLayout"
-title = "Show a Merge Tab"
-hidden = true
-
-[[commands]]
 id = "flareite.git.nextChange"
 title = "Go to Next Change"
 
@@ -520,13 +469,11 @@ hidden = true
 [[layouts]]
 id = "diff"
 title = "Diff"
-command = "flareite.git.diffLayout"
 
 # A conflicted file's incoming and current versions above the result.
 [[layouts]]
 id = "merge"
 title = "Merge Editor"
-command = "flareite.git.mergeLayout"
 
 # Moving between a diff's changes, or a merge's conflicts.
 [[keybindings]]
@@ -545,33 +492,8 @@ title = "Choose a Repository"
 hidden = true
 
 [[commands]]
-id = "flareite.git.selectionChanged"
-title = "Follow the Cursor's Line"
-hidden = true
-
-[[commands]]
 id = "flareite.git.blameDetails"
 title = "Open the Blamed Commit"
-hidden = true
-
-[[commands]]
-id = "flareite.git.original"
-title = "Name a File's Original"
-hidden = true
-
-[[commands]]
-id = "flareite.git.stageChanges"
-title = "Stage Changes"
-hidden = true
-
-[[commands]]
-id = "flareite.git.autofetch"
-title = "Fetch in the Background"
-hidden = true
-
-[[commands]]
-id = "flareite.git.expandCommit"
-title = "List a Commit's Files"
 hidden = true
 
 # The Changes view's header.
